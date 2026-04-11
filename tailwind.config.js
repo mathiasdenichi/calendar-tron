@@ -2,7 +2,17 @@
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
-    extend: {},
+    extend: {
+      keyframes: {
+        'progress-indeterminate': {
+          '0%': { transform: 'translateX(-100%)', width: '60%' },
+          '100%': { transform: 'translateX(200%)', width: '60%' },
+        },
+      },
+      animation: {
+        'progress-indeterminate': 'progress-indeterminate 1.4s ease-in-out infinite',
+      },
+    },
   },
   plugins: [],
 };

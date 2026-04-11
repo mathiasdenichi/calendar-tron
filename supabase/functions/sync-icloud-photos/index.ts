@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -14,7 +15,7 @@ const ICLOUD_HEADERS = {
   "Referer": "https://www.icloud.com/",
 };
 
-async function fetchWebstream(baseUrl: string): Promise<Record<string, unknown> | null> {
+async function fetchWebstream(baseUrl: string): Promise<{ data: Record<string, unknown>; baseUrl: string } | null> {
   const res = await fetch(`${baseUrl}/webstream`, {
     method: "POST",
     headers: ICLOUD_HEADERS,
@@ -31,16 +32,11 @@ async function fetchWebstream(baseUrl: string): Promise<Record<string, unknown> 
       headers: ICLOUD_HEADERS,
       body: JSON.stringify({ streamCtag: null }),
     });
-    if (redirectRes.ok) {
-      return { data: await redirectRes.json(), baseUrl: redirectBase };
-    }
+    if (redirectRes.ok) return { data: await redirectRes.json(), baseUrl: redirectBase };
     return null;
   }
 
-  if (res.ok) {
-    return { data: await res.json(), baseUrl };
-  }
-
+  if (res.ok) return { data: await res.json(), baseUrl };
   return null;
 }
 
@@ -56,6 +52,35 @@ async function fetchAssetUrls(
   if (!res.ok) return {};
   const data = await res.json() as { items?: Record<string, { url_location: string; url_path: string }> };
   return data.items || {};
+}
+
+async function uploadPhotoToStorage(
+  supabase: ReturnType<typeof createClient>,
+  guid: string,
+  url: string
+): Promise<string | null> {
+  try {
+    const imgRes = await fetch(url);
+    if (!imgRes.ok) return null;
+    const contentType = imgRes.headers.get("content-type") || "image/jpeg";
+    const ext = contentType.includes("png") ? "png" : contentType.includes("webp") ? "webp" : "jpg";
+    const storagePath = `icloud/${guid}.${ext}`;
+    const imgBytes = await imgRes.arrayBuffer();
+
+    const { error: uploadErr } = await supabase.storage
+      .from("slideshow-photos")
+      .upload(storagePath, imgBytes, { contentType, upsert: true });
+
+    if (uploadErr) return null;
+
+    const { data: urlData } = supabase.storage
+      .from("slideshow-photos")
+      .getPublicUrl(storagePath);
+
+    return urlData.publicUrl;
+  } catch {
+    return null;
+  }
 }
 
 Deno.serve(async (req: Request) => {
@@ -79,6 +104,11 @@ Deno.serve(async (req: Request) => {
       if (param) token = param;
     }
 
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
     const servers = ["p23", "p26", "p34", "p58", "p66"];
     let streamData: Record<string, unknown> | null = null;
     let resolvedBaseUrl = "";
@@ -88,8 +118,8 @@ Deno.serve(async (req: Request) => {
       try {
         const result = await fetchWebstream(baseUrl);
         if (result) {
-          streamData = result.data as Record<string, unknown>;
-          resolvedBaseUrl = result.baseUrl as string;
+          streamData = result.data;
+          resolvedBaseUrl = result.baseUrl;
           break;
         }
       } catch {
@@ -99,27 +129,21 @@ Deno.serve(async (req: Request) => {
 
     if (!streamData || !streamData.photos) {
       return new Response(
-        JSON.stringify({ photos: [], error: "Could not reach iCloud shared stream" }),
+        JSON.stringify({ synced: 0, total: 0, error: "Could not reach iCloud shared stream" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     const photos = streamData.photos as Record<string, unknown>[];
     const photoGuids = photos.map((p) => p.photoGuid as string).filter(Boolean);
-
     const assetItems = await fetchAssetUrls(resolvedBaseUrl, photoGuids);
 
-    const checksumsToGuid: Record<string, string> = {};
     const guidToDerivatives: Record<string, Record<string, { checksum: string; width?: number; height?: number; fileSize?: number }>> = {};
-
     for (const photo of photos) {
       const guid = photo.photoGuid as string;
       const derivatives = photo.derivatives as Record<string, { checksum: string; width?: number; height?: number; fileSize?: number }> | undefined;
       if (!guid || !derivatives) continue;
       guidToDerivatives[guid] = derivatives;
-      for (const d of Object.values(derivatives)) {
-        if (d.checksum) checksumsToGuid[d.checksum] = guid;
-      }
     }
 
     const checksumToUrl: Record<string, string> = {};
@@ -129,38 +153,84 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const result = photoGuids.map((guid) => {
+    const { data: existingRows } = await supabase
+      .from("slideshow_photos")
+      .select("guid, storage_url");
+    const existingMap = new Map(
+      (existingRows || []).map((r: { guid: string; storage_url: string | null }) => [r.guid, r.storage_url])
+    );
+
+    const upsertRows: {
+      guid: string;
+      original_url: string;
+      thumb_url: string;
+      storage_url: string | null;
+      width: number;
+      height: number;
+      synced_at: string;
+    }[] = [];
+
+    const newGuids: { guid: string; url: string }[] = [];
+
+    for (const guid of photoGuids) {
       const derivatives = guidToDerivatives[guid];
-      if (!derivatives) return null;
+      if (!derivatives) continue;
 
       const sorted = Object.values(derivatives).sort(
         (a, b) => (b.fileSize || b.width || 0) - (a.fileSize || a.width || 0)
       );
-
       const best = sorted[0];
       const thumb = sorted[sorted.length - 1] || best;
 
       const bestUrl = best?.checksum ? checksumToUrl[best.checksum] : null;
       const thumbUrl = thumb?.checksum ? checksumToUrl[thumb.checksum] : null;
 
-      if (!bestUrl) return null;
+      if (!bestUrl) continue;
 
-      return {
+      const existingStorageUrl = existingMap.has(guid) ? existingMap.get(guid) : undefined;
+
+      upsertRows.push({
         guid,
-        url: bestUrl,
-        thumbUrl: thumbUrl || bestUrl,
+        original_url: bestUrl,
+        thumb_url: thumbUrl || bestUrl,
+        storage_url: existingStorageUrl || null,
         width: best?.width || 0,
         height: best?.height || 0,
-      };
-    }).filter(Boolean);
+        synced_at: new Date().toISOString(),
+      });
+
+      if (!existingMap.has(guid)) {
+        newGuids.push({ guid, url: bestUrl });
+      }
+    }
+
+    if (upsertRows.length > 0) {
+      await supabase
+        .from("slideshow_photos")
+        .upsert(upsertRows, { onConflict: "guid" });
+    }
+
+    EdgeRuntime.waitUntil(
+      (async () => {
+        for (const { guid, url } of newGuids) {
+          const storageUrl = await uploadPhotoToStorage(supabase, guid, url);
+          if (storageUrl) {
+            await supabase
+              .from("slideshow_photos")
+              .update({ storage_url: storageUrl })
+              .eq("guid", guid);
+          }
+        }
+      })()
+    );
 
     return new Response(
-      JSON.stringify({ photos: result }),
+      JSON.stringify({ synced: upsertRows.length, total: photoGuids.length, new: newGuids.length }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
     return new Response(
-      JSON.stringify({ photos: [], error: String(err) }),
+      JSON.stringify({ synced: 0, total: 0, error: String(err) }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

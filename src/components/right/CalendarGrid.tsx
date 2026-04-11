@@ -122,7 +122,11 @@ export function CalendarGrid({ eventsByDate, photosByDate, onDayDoubleTap }: Cal
         ))}
       </div>
 
-      <div className="flex items-center gap-4 mt-3 px-1">
+      <div className="flex items-center gap-4 mt-3 px-1 flex-wrap">
+        <div className="flex items-center gap-1.5">
+          <span className="w-3 h-3 rounded-sm bg-amber-500/30 border border-amber-400/40" />
+          <span className="text-gray-500 text-xs">Holidays</span>
+        </div>
         <div className="flex items-center gap-1.5">
           <span className="w-3 h-3 rounded-sm bg-blue-600/50 border border-blue-600/40" />
           <span className="text-gray-500 text-xs">iCloud</span>

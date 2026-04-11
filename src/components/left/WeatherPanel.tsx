@@ -1,9 +1,27 @@
+import { useRef, useLayoutEffect, useState } from "react";
 import { useWeather } from "../../hooks/useWeather";
 import { getWeatherCondition, getWeatherDescription } from "../../lib/weatherCodes";
 import { WeatherIcon } from "./WeatherIcon";
+import { RadarBox } from "./RadarBox";
+import { CurrentWeather } from "./CurrentWeather";
 
-export function WeatherPanel() {
+interface WeatherPanelProps {
+  onOpenRadar: () => void;
+}
+
+export function WeatherPanel({ onOpenRadar }: WeatherPanelProps) {
   const { weather, loading } = useWeather();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [radarDim, setRadarDim] = useState<number | null>(null);
+
+  useLayoutEffect(() => {
+    if (!containerRef.current || radarDim !== null) return;
+    const w = containerRef.current.offsetWidth;
+    if (w > 0) {
+      const forecastItemW = Math.floor((w - 4 * 8) / 5);
+      setRadarDim(forecastItemW * 2 + 8);
+    }
+  });
 
   if (loading || !weather) {
     return (
@@ -20,40 +38,41 @@ export function WeatherPanel() {
   const forecastDays = weather.daily.slice(1, 6);
 
   return (
-    <div className="w-full">
-      <div className="flex items-end gap-4 mb-4">
-        <WeatherIcon condition={condition} size={88} />
-        <div>
-          <div className="flex items-end gap-2">
-            <span className="text-white font-light drop-shadow-lg" style={{ fontSize: "4rem", lineHeight: 1 }}>
-              {weather.current.temperature}°
-            </span>
-            <span className="text-white/70 text-xl mb-2">F</span>
+    <div ref={containerRef} className="w-full">
+      <div className="flex gap-2 items-end">
+        <div className="flex flex-col flex-1 gap-2">
+          <CurrentWeather
+            temperature={weather.current.temperature}
+            condition={condition}
+            description={description}
+            todayHighLow={todayForecast ? { maxTemp: todayForecast.maxTemp, minTemp: todayForecast.minTemp } : undefined}
+            windSpeed={weather.current.windSpeed}
+          />
+          <div className="flex gap-2">
+            {forecastDays.map((day) => {
+              const dc = getWeatherCondition(day.weatherCode);
+              return (
+                <div
+                  key={day.date}
+                  className="flex-1 bg-black/20 backdrop-blur-sm rounded-xl p-2 flex flex-col items-center gap-1 border border-white/10"
+                >
+                  <span className="text-white/70 text-xs font-medium">{day.dayLabel}</span>
+                  <WeatherIcon condition={dc} size={32} />
+                  <span className="text-white text-sm font-medium">{day.maxTemp}°</span>
+                  <span className="text-white/50 text-xs">{day.minTemp}°</span>
+                </div>
+              );
+            })}
           </div>
-          <div className="text-white/70 text-base font-light">{description}</div>
-          {todayForecast && (
-            <div className="text-white/60 text-sm mt-1">
-              H: {todayForecast.maxTemp}° · L: {todayForecast.minTemp}° · Wind: {weather.current.windSpeed} mph
-            </div>
-          )}
         </div>
-      </div>
 
-      <div className="flex gap-2">
-        {forecastDays.map((day) => {
-          const dc = getWeatherCondition(day.weatherCode);
-          return (
-            <div
-              key={day.date}
-              className="flex-1 bg-black/20 backdrop-blur-sm rounded-xl p-2 flex flex-col items-center gap-1 border border-white/10"
-            >
-              <span className="text-white/70 text-xs font-medium">{day.dayLabel}</span>
-              <WeatherIcon condition={dc} size={32} />
-              <span className="text-white text-sm font-medium">{day.maxTemp}°</span>
-              <span className="text-white/50 text-xs">{day.minTemp}°</span>
-            </div>
-          );
-        })}
+        {radarDim !== null && (
+          <RadarBox
+            onDoubleClick={onOpenRadar}
+            width={radarDim}
+            height={radarDim}
+          />
+        )}
       </div>
     </div>
   );

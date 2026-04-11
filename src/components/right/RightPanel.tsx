@@ -12,7 +12,9 @@ export function RightPanel() {
     addEvent,
     deleteEvent,
     addDatePhoto,
+    addDatePhotoFromGallery,
     deleteDatePhoto,
+    loadGalleryPhotos,
   } = useCalendar();
 
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -29,7 +31,7 @@ export function RightPanel() {
   const selectedPhotos: DatePhoto[] = selectedDate ? photosByDate[getDateStr(selectedDate)] || [] : [];
 
   return (
-    <div className="w-1/2 h-full bg-gray-950 flex flex-col p-6 overflow-hidden">
+    <div className="w-full h-full bg-gray-950 flex flex-col p-6 overflow-hidden">
       {loading ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="text-gray-500 text-lg">Loading calendar...</div>
@@ -51,7 +53,9 @@ export function RightPanel() {
           onAddEvent={addEvent}
           onDeleteEvent={deleteEvent}
           onUploadPhoto={addDatePhoto}
+          onAddPhotoFromGallery={addDatePhotoFromGallery}
           onDeletePhoto={deleteDatePhoto}
+          onLoadGallery={loadGalleryPhotos}
         />
       )}
     </div>

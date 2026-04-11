@@ -5,7 +5,8 @@ export interface CalendarEvent {
   startTime: Date;
   endTime: Date;
   date: string;
-  source: "icloud" | "local";
+  source: "icloud" | "local" | "holiday";
+  allDay?: boolean;
 }
 
 export interface CustomEvent {
@@ -15,6 +16,7 @@ export interface CustomEvent {
   start_time: string;
   end_time: string;
   date: string;
+  all_day: boolean;
   created_at: string;
 }
 
