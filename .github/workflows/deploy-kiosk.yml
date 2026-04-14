@@ -1,0 +1,32 @@
+name: Deploy to Kiosk
+
+on:
+  push:
+    branches: [ main ]     # change to "master" if that's your default branch
+
+jobs:
+  deploy:
+    runs-on: self-hosted    # ← this runs on your DreamQuest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build React app
+        run: npm run build
+
+      - name: Restart Kiosk App
+        run: |
+          # Kill any old Electron instance
+          taskkill /F /IM electron.exe /T 2>$null || echo "No old process found"
+          
+          # Start the new version
+          Start-Process "npm" -ArgumentList "run electron" -NoNewWindow -WorkingDirectory "${{ github.workspace }}"
