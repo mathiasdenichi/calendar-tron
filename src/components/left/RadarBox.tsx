@@ -5,12 +5,12 @@ const COLS = 3;
 const ROWS = 4;
 
 interface RadarBoxProps {
-  onDoubleClick: () => void;
+  onClick: () => void;
   width: number;
   height: number;
 }
 
-export function RadarBox({ onDoubleClick, width, height }: RadarBoxProps) {
+export function RadarBox({ onClick, width, height }: RadarBoxProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawingRef = useRef(false);
   const pendingRef = useRef<{ frames: typeof radarService.frames; index: number } | null>(null);
@@ -56,8 +56,8 @@ export function RadarBox({ onDoubleClick, width, height }: RadarBoxProps) {
     <div
       className="relative rounded-lg overflow-hidden border border-white/20 cursor-pointer flex-shrink-0"
       style={{ width, height }}
-      onDoubleClick={onDoubleClick}
-      title="Double-tap for full radar"
+      onClick={onClick}
+      title="Tap for full radar"
     >
       <canvas
         ref={canvasRef}

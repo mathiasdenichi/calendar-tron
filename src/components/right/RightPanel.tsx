@@ -10,6 +10,7 @@ export function RightPanel() {
     photosByDate,
     loading,
     addEvent,
+    updateEvent,
     deleteEvent,
     addDatePhoto,
     addDatePhotoFromGallery,
@@ -51,6 +52,7 @@ export function RightPanel() {
           photos={selectedPhotos}
           onClose={() => setSelectedDate(null)}
           onAddEvent={addEvent}
+          onUpdateEvent={updateEvent}
           onDeleteEvent={deleteEvent}
           onUploadPhoto={addDatePhoto}
           onAddPhotoFromGallery={addDatePhotoFromGallery}

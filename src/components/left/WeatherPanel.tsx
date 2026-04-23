@@ -68,7 +68,7 @@ export function WeatherPanel({ onOpenRadar }: WeatherPanelProps) {
 
         {radarDim !== null && (
           <RadarBox
-            onDoubleClick={onOpenRadar}
+            onClick={onOpenRadar}
             width={radarDim}
             height={radarDim}
           />

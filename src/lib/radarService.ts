@@ -58,45 +58,58 @@ export async function drawRadarFrame(
   const mx = DOT_X * (tileW / 256) + centerOffX * tileW;
   const my = DOT_Y * (tileH / 256) + centerOffY * tileH;
 
-  ctx.clearRect(0, 0, cw, ch);
-
-  const tilePromises: Promise<void>[] = [];
+  const tiles: { tx: number; ty: number; dx: number; dy: number }[] = [];
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      const tx = TILE_X - centerOffX + c;
-      const ty = TILE_Y - centerOffY + r;
-      const dx = c * tileW;
-      const dy = r * tileH;
-      const osmUrl = `https://tile.openstreetmap.org/${ZOOM}/${tx}/${ty}.png`;
-      const radarUrl = `https://tilecache.rainviewer.com${frame.path}/256/${ZOOM}/${tx}/${ty}/${colorScheme}/1_1.png`;
-
-      tilePromises.push(
-        loadImage(osmUrl)
-          .then((osmImg) => {
-            ctx.drawImage(osmImg, dx, dy, tileW, tileH);
-            return loadImage(radarUrl).catch(() => null);
-          })
-          .then((radarImg) => {
-            if (radarImg) {
-              ctx.globalAlpha = 0.8;
-              ctx.drawImage(radarImg, dx, dy, tileW, tileH);
-              ctx.globalAlpha = 1;
-            }
-          })
-          .catch(() => {})
-      );
+      tiles.push({
+        tx: TILE_X - centerOffX + c,
+        ty: TILE_Y - centerOffY + r,
+        dx: c * tileW,
+        dy: r * tileH,
+      });
     }
   }
 
-  await Promise.all(tilePromises);
+  // Load all images fully before touching the canvas — prevents blank flash
+  const loaded = await Promise.all(
+    tiles.map(async ({ tx, ty, dx, dy }) => {
+      const osmUrl = `https://tile.openstreetmap.org/${ZOOM}/${tx}/${ty}.png`;
+      const radarUrl = `https://tilecache.rainviewer.com${frame.path}/256/${ZOOM}/${tx}/${ty}/${colorScheme}/1_1.png`;
+      const [osmImg, radarImg] = await Promise.all([
+        loadImage(osmUrl).catch(() => null),
+        loadImage(radarUrl).catch(() => null),
+      ]);
+      return { dx, dy, osmImg, radarImg };
+    })
+  );
 
-  ctx.beginPath();
-  ctx.arc(mx, my, markerRadius, 0, Math.PI * 2);
-  ctx.fillStyle = "#ef4444";
-  ctx.fill();
-  ctx.strokeStyle = "white";
-  ctx.lineWidth = Math.max(1.5, markerRadius / 3);
-  ctx.stroke();
+  // Draw to offscreen canvas first, then blit atomically — no visible clear flash
+  const offscreen = document.createElement("canvas");
+  offscreen.width = cw;
+  offscreen.height = ch;
+  const off = offscreen.getContext("2d")!;
+
+  for (const { dx, dy, osmImg } of loaded) {
+    if (osmImg) off.drawImage(osmImg, dx, dy, tileW, tileH);
+  }
+  for (const { dx, dy, radarImg } of loaded) {
+    if (radarImg) {
+      off.globalAlpha = 0.8;
+      off.drawImage(radarImg, dx, dy, tileW, tileH);
+      off.globalAlpha = 1;
+    }
+  }
+
+  off.beginPath();
+  off.arc(mx, my, markerRadius, 0, Math.PI * 2);
+  off.fillStyle = "#ef4444";
+  off.fill();
+  off.strokeStyle = "white";
+  off.lineWidth = Math.max(1.5, markerRadius / 3);
+  off.stroke();
+
+  ctx.clearRect(0, 0, cw, ch);
+  ctx.drawImage(offscreen, 0, 0);
 }
 
 class RadarService {
@@ -127,10 +140,22 @@ class RadarService {
   private startLoop() {
     if (this.intervalId) clearInterval(this.intervalId);
     if (this.frames.length < 2) return;
-    this.intervalId = setInterval(() => {
-      this.frameIndex = (this.frameIndex + 1) % this.frames.length;
-      this.notify();
-    }, 700);
+
+    const schedule = () => {
+      const isLast = this.frameIndex === this.frames.length - 1;
+      // Hold the last frame 2s, all others 700ms
+      this.intervalId = setTimeout(() => {
+        this.frameIndex = (this.frameIndex + 1) % this.frames.length;
+        this.notify();
+        schedule();
+      }, isLast ? 2000 : 700);
+    };
+
+    schedule();
+  }
+
+  stopLoop() {
+    if (this.intervalId) { clearTimeout(this.intervalId); this.intervalId = null; }
   }
 
   private notify() {
@@ -152,7 +177,7 @@ class RadarService {
     if (playing) {
       this.startLoop();
     } else {
-      if (this.intervalId) { clearInterval(this.intervalId); this.intervalId = null; }
+      this.stopLoop();
     }
   }
 }

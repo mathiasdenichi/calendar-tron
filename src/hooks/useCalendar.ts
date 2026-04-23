@@ -4,7 +4,9 @@ import { CalendarEvent, CustomEvent, DatePhoto } from "../types";
 import { parseICS } from "../lib/icalParser";
 import { supabase } from "../lib/supabase";
 import { getHolidaysForRange } from "../lib/holidays";
-import { SlideshowPhoto } from "./useICloudPhotos";
+import { SlideshowPhoto, loadLocalGalleryPhotos } from "./useICloudPhotos";
+import { getAllDatePhotos, upsertDatePhoto, removeDatePhotosByDate, removeDatePhotoById } from "../lib/localPhotoDb";
+import { storeImage, getImageUrl, removeImage } from "../lib/localImageStore";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
@@ -63,8 +65,17 @@ export function useCalendar() {
   }, []);
 
   const fetchDatePhotos = useCallback(async () => {
-    const { data } = await supabase.from("date_photos").select("*").order("created_at");
-    if (data) setDatePhotos(data as DatePhoto[]);
+    const stored = getAllDatePhotos();
+    const hydrated = await Promise.all(
+      stored.map(async (p) => {
+        if (p.photo_url.startsWith("blob:") || !p.photo_url) {
+          const fresh = await getImageUrl(`date:${p.id}`);
+          return fresh ? { ...p, photo_url: fresh } : p;
+        }
+        return p;
+      })
+    );
+    setDatePhotos(hydrated);
   }, []);
 
   useEffect(() => {
@@ -110,80 +121,98 @@ export function useCalendar() {
     await fetchLocalEvents();
   };
 
+  const updateEvent = async (id: string, event: {
+    title: string;
+    description: string;
+    startTime: Date;
+    endTime: Date;
+    date: string;
+    allDay: boolean;
+  }) => {
+    const { error } = await supabase
+      .from("custom_events")
+      .update({
+        title: event.title,
+        description: event.description,
+        start_time: event.startTime.toISOString(),
+        end_time: event.endTime.toISOString(),
+        date: event.date,
+        all_day: event.allDay,
+      })
+      .eq("id", id);
+    if (!error) await fetchLocalEvents();
+    return { error };
+  };
+
   const addDatePhoto = async (date: string, file: File) => {
-    const existing = datePhotos.filter((p) => p.date === date);
-    for (const p of existing) {
-      const storagePath = p.photo_url.split("/date-photos/")[1];
-      if (storagePath) await supabase.storage.from("date-photos").remove([storagePath]);
-      await supabase.from("date_photos").delete().eq("id", p.id);
+    const removed = removeDatePhotosByDate(date);
+    for (const p of removed) {
+      await removeImage(`date:${p.id}`).catch(() => null);
     }
 
-    const ext = file.name.split(".").pop();
-    const path = `${date}/${Date.now()}.${ext}`;
-    const { error: uploadError } = await supabase.storage.from("date-photos").upload(path, file);
-    if (uploadError) return { error: uploadError };
+    const id = `${date}-${Date.now()}`;
+    const key = `date:${id}`;
+    try {
+      const blob = new Blob([await file.arrayBuffer()], { type: file.type });
+      await storeImage(key, blob);
+    } catch {
+      return { error: new Error("Failed to store image locally") };
+    }
 
-    const { data: urlData } = supabase.storage.from("date-photos").getPublicUrl(path);
-    const { error: dbError } = await supabase.from("date_photos").insert({
+    const objectUrl = (await getImageUrl(key)) ?? "";
+    const photo: DatePhoto = {
+      id,
       date,
-      photo_url: urlData.publicUrl,
+      photo_url: objectUrl,
       filename: file.name,
-    });
-
-    if (!dbError) await fetchDatePhotos();
-    return { error: dbError };
+      created_at: new Date().toISOString(),
+    };
+    upsertDatePhoto(photo);
+    fetchDatePhotos();
+    return { error: null };
   };
 
   const addDatePhotoFromGallery = async (date: string, photo: SlideshowPhoto) => {
-    const existing = datePhotos.filter((p) => p.date === date);
-    for (const p of existing) {
-      const storagePath = p.photo_url.split("/date-photos/")[1];
-      if (storagePath) await supabase.storage.from("date-photos").remove([storagePath]);
-      await supabase.from("date_photos").delete().eq("id", p.id);
+    const removed = removeDatePhotosByDate(date);
+    for (const p of removed) {
+      await removeImage(`date:${p.id}`).catch(() => null);
     }
 
-    const { error: dbError } = await supabase.from("date_photos").insert({
+    const id = `${date}-${Date.now()}`;
+    const key = `date:${id}`;
+    let objectUrl = photo.url;
+
+    try {
+      const res = await fetch(photo.url);
+      if (res.ok) {
+        const blob = await res.blob();
+        await storeImage(key, blob);
+        objectUrl = (await getImageUrl(key)) ?? photo.url;
+      }
+    } catch {
+      // fall back to original URL if download fails
+    }
+
+    const record: DatePhoto = {
+      id,
       date,
-      photo_url: photo.url,
+      photo_url: objectUrl,
       filename: `icloud-${photo.guid}.jpg`,
-    });
-
-    if (!dbError) await fetchDatePhotos();
-    return { error: dbError };
+      created_at: new Date().toISOString(),
+    };
+    upsertDatePhoto(record);
+    fetchDatePhotos();
+    return { error: null };
   };
 
-  const deleteDatePhoto = async (id: string, photoUrl: string) => {
-    const storagePath = photoUrl.split("/date-photos/")[1];
-    if (storagePath) await supabase.storage.from("date-photos").remove([storagePath]);
-    await supabase.from("date_photos").delete().eq("id", id);
-    await fetchDatePhotos();
+  const deleteDatePhoto = async (id: string, _photoUrl: string) => {
+    removeDatePhotoById(id);
+    await removeImage(`date:${id}`).catch(() => null);
+    fetchDatePhotos();
   };
 
-  const VIDEO_EXTENSIONS = /\.(mp4|mov|m4v|avi|mkv|webm|3gp|hevc|gif)(\?|$)/i;
-  const GALLERY_PAGE_SIZE = 25;
-
-  const loadGalleryPhotos = async (offset = 0): Promise<{ photos: SlideshowPhoto[]; hasMore: boolean }> => {
-    const { data } = await supabase
-      .from("slideshow_photos")
-      .select("guid, storage_url, original_url, thumb_url, width, height")
-      .order("created_at", { ascending: false })
-      .range(offset, offset + GALLERY_PAGE_SIZE + 9);
-
-    if (!data || data.length === 0) return { photos: [], hasMore: false };
-
-    const filtered = data.filter((row: { guid: string; storage_url: string | null; original_url: string }) => {
-      const url = row.storage_url || row.original_url || "";
-      return !VIDEO_EXTENSIONS.test(url);
-    });
-
-    const photos = filtered.slice(0, GALLERY_PAGE_SIZE).map((row: { guid: string; storage_url: string | null; original_url: string; thumb_url: string | null; width: number; height: number }) => ({
-      guid: row.guid,
-      url: row.thumb_url || row.storage_url || row.original_url,
-      width: row.width,
-      height: row.height,
-    }));
-
-    return { photos, hasMore: filtered.length > GALLERY_PAGE_SIZE || data.length > GALLERY_PAGE_SIZE };
+  const loadGalleryPhotos = (offset = 0): Promise<{ photos: SlideshowPhoto[]; hasMore: boolean }> => {
+    return loadLocalGalleryPhotos(offset);
   };
 
   const allEvents = [...holidayEvents, ...icloudEvents, ...localEvents].sort(
@@ -208,6 +237,7 @@ export function useCalendar() {
     photosByDate,
     loading,
     addEvent,
+    updateEvent,
     deleteEvent,
     addDatePhoto,
     addDatePhotoFromGallery,

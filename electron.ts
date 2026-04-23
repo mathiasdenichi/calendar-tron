@@ -7,11 +7,11 @@ const __dirname = path.dirname(__filename);
 
 function createWindow(): void {
   const win = new BrowserWindow({
-    width: 1920,          // fallback size
+    width: 1920,
     height: 1080,
     fullscreen: false,
-    kiosk: false,         // ← important so taskbar stays visible
-    frame: false,         // removes title bar for clean kiosk look
+    kiosk: false,
+    frame: false,
     autoHideMenuBar: true,
     webPreferences: {
       nodeIntegration: false,
@@ -19,16 +19,12 @@ function createWindow(): void {
     },
   });
 
-  // Load your built React app
   win.loadFile(path.join(__dirname, 'dist/index.html'));
 
-  // Maximize the window (this is the correct way)
   win.maximize();
 
-  // Optional: keep app on top but still allow taskbar
   win.setAlwaysOnTop(false);
 
-  // Prevent accidental close (remove this line later if you want normal closing)
   win.on('close', (e: Electron.Event) => {
     e.preventDefault();
   });
