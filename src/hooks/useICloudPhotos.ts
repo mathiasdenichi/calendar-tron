@@ -1,15 +1,27 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import axios from "axios";
-import { getImageUrl, hasImage, downloadAndStore } from "../lib/localImageStore";
+import { getImageUrls, getAllKeys, removeImages, downloadAndStore } from "../lib/localImageStore";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
 const LOCAL_META_KEY = "slideshow_photos_meta";
 
+// Two cached tiers per photo: the full derivative drives the full-bleed slideshow,
+// the small one drives the strip and the picker grid. Storing only the small one
+// is what used to make the left panel look pixelated.
+const SLIDESHOW_PREFIX = "slideshow:";
+const fullKey = (guid: string) => `${SLIDESHOW_PREFIX}full:${guid}`;
+const thumbKey = (guid: string) => `${SLIDESHOW_PREFIX}thumb:${guid}`;
+
+const DOWNLOAD_CONCURRENCY = 6;
+
 export interface SlideshowPhoto {
   guid: string;
+  /** Full-resolution image — use for anything displayed large. */
   url: string;
+  /** Small derivative — use for thumbnails and grids. */
+  thumbUrl: string;
   width: number;
   height: number;
 }
@@ -42,6 +54,33 @@ function loadStoredMeta(): StoredPhotoMeta[] {
 
 function saveStoredMeta(metas: StoredPhotoMeta[]): void {
   localStorage.setItem(LOCAL_META_KEY, JSON.stringify(metas));
+}
+
+/** Resolves cached blobs for a page of metadata, falling back to the remote URL. */
+async function hydrate(metas: StoredPhotoMeta[]): Promise<SlideshowPhoto[]> {
+  const keys: string[] = [];
+  for (const m of metas) {
+    keys.push(fullKey(m.guid), thumbKey(m.guid));
+  }
+  const urls = await getImageUrls(keys);
+
+  return metas.map((m) => {
+    const full = urls.get(fullKey(m.guid)) ?? m.originalUrl;
+    const thumb = urls.get(thumbKey(m.guid)) ?? m.thumbUrl ?? full;
+    return { guid: m.guid, url: full, thumbUrl: thumb, width: m.width, height: m.height };
+  });
+}
+
+/** Runs tasks with a bounded number in flight. Never rejects. */
+async function runPool<T>(items: T[], limit: number, worker: (item: T) => Promise<void>): Promise<void> {
+  let cursor = 0;
+  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const item = items[cursor++];
+      await worker(item).catch(() => undefined);
+    }
+  });
+  await Promise.all(runners);
 }
 
 const VIDEO_EXTS = /\.(mp4|mov|m4v|avi|mkv|webm|3gp|hevc|heic\.mp4)(\?|$)/i;
@@ -90,17 +129,7 @@ export function useICloudPhotos() {
   const loadFromLocal = useCallback(async (): Promise<SlideshowPhoto[]> => {
     const metas = loadStoredMeta().filter((m) => !VIDEO_EXTS.test(m.originalUrl));
     if (metas.length === 0) return [];
-
-    const results: SlideshowPhoto[] = [];
-    for (const m of metas) {
-      const key = `slideshow:${m.guid}`;
-      let url = await getImageUrl(key);
-      if (!url) {
-        url = m.originalUrl;
-      }
-      results.push({ guid: m.guid, url, width: m.width, height: m.height });
-    }
-    return results;
+    return hydrate(metas);
   }, []);
 
   const runSync = useCallback(async (showSyncing = false) => {
@@ -121,8 +150,6 @@ export function useICloudPhotos() {
       if (!Array.isArray(data?.photos)) return;
 
       const incoming: Array<{ guid: string; url: string; thumbUrl: string; width: number; height: number }> = data.photos;
-      const existing = loadStoredMeta();
-      const existingGuids = new Set(existing.map((m) => m.guid));
 
       const newMetas: StoredPhotoMeta[] = [];
       for (const p of incoming) {
@@ -136,16 +163,40 @@ export function useICloudPhotos() {
         });
       }
 
+      if (newMetas.length === 0) return;
+
       saveStoredMeta(newMetas);
 
-      const toDownload = newMetas.filter((m) => !existingGuids.has(m.guid));
-      for (const m of toDownload) {
-        const key = `slideshow:${m.guid}`;
-        if (!(await hasImage(key))) {
-          const sourceUrl = m.thumbUrl || m.originalUrl;
-          await downloadAndStore(key, sourceUrl).catch(() => null);
-        }
+      // Show full-resolution immediately by streaming from iCloud; the local
+      // cache below just makes subsequent loads instant.
+      if (photosLengthRef.current === 0) {
+        const remote = await hydrate(newMetas);
+        if (remote.length > 0) setPhotos(shuffle(remote));
       }
+
+      const existingKeys = new Set(await getAllKeys());
+
+      const jobs: Array<{ key: string; url: string }> = [];
+      for (const m of newMetas) {
+        const fk = fullKey(m.guid);
+        const tk = thumbKey(m.guid);
+        if (!existingKeys.has(fk)) jobs.push({ key: fk, url: m.originalUrl });
+        if (!existingKeys.has(tk)) jobs.push({ key: tk, url: m.thumbUrl || m.originalUrl });
+      }
+
+      // Drop blobs for photos no longer in the album, plus the legacy
+      // single-tier `slideshow:<guid>` entries from before the two-tier split.
+      const wanted = new Set(jobs.map((j) => j.key));
+      for (const m of newMetas) {
+        wanted.add(fullKey(m.guid));
+        wanted.add(thumbKey(m.guid));
+      }
+      const stale = [...existingKeys].filter((k) => k.startsWith(SLIDESHOW_PREFIX) && !wanted.has(k));
+      if (stale.length > 0) await removeImages(stale);
+
+      await runPool(jobs, DOWNLOAD_CONCURRENCY, async ({ key, url }) => {
+        await downloadAndStore(key, url);
+      });
 
       const fresh = await loadFromLocal();
       if (fresh.length > 0) {
@@ -217,14 +268,5 @@ export async function loadLocalGalleryPhotos(offset = 0, pageSize = 25): Promise
   if (metas.length === 0) return { photos: [], hasMore: false };
 
   const page = metas.slice(offset, offset + pageSize);
-  const results: SlideshowPhoto[] = [];
-
-  for (const m of page) {
-    const key = `slideshow:${m.guid}`;
-    let url = await getImageUrl(key);
-    if (!url) url = m.thumbUrl || m.originalUrl;
-    results.push({ guid: m.guid, url, width: m.width, height: m.height });
-  }
-
-  return { photos: results, hasMore: offset + pageSize < metas.length };
+  return { photos: await hydrate(page), hasMore: offset + pageSize < metas.length };
 }

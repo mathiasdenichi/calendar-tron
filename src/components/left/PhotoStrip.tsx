@@ -51,7 +51,7 @@ export function PhotoStrip({ photos, currentIndex, history, upcomingIndex, onSel
             >
               <div className="relative w-full h-full">
                 <img
-                  src={photo.url}
+                  src={photo.thumbUrl}
                   alt=""
                   className="w-full h-full object-cover"
                   loading="lazy"

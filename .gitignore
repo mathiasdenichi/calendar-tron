@@ -15,6 +15,10 @@ dist-ssr
 !.vscode/extensions.json
 .idea
 .DS_Store
+
+# kiosk supervisor state
+.kiosk-deployed
+kiosk.log
 *.suo
 *.ntvs*
 *.njsproj
