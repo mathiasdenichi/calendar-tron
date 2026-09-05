@@ -5,8 +5,19 @@ static file server inside its own main process and points the window at
 `http://localhost:5173`. No Vite, no HMR, no second Node process — just the one
 minified bundle.
 
-`scripts/kiosk.ps1` supervises it: it launches the window, then polls
-`origin/main` every two minutes and rebuilds + restarts whenever the branch moves.
+`scripts/kiosk.ps1` supervises it. Once it is running, it:
+
+- launches the kiosk window, and **relaunches it within ~5 seconds if it dies**
+  — crash, stray `Ctrl+Shift+Q`, anything;
+- polls `origin/main` every two minutes and, when the branch moves, resets to it,
+  reinstalls dependencies if `package-lock.json` changed, rebuilds, and restarts
+  the window;
+- takes ownership of port 5173, killing whatever else is holding it.
+
+Electron additionally reloads its own renderer if that process crashes or hangs,
+so a wedged page recovers without waiting for the poll.
+
+Nothing else is required for a merge to `main` to reach the screen.
 
 ## Why it serves over http instead of loading dist/ off disk
 
@@ -62,18 +73,24 @@ Re-run that `fetch` and confirm it completes without a prompt before moving on.
 
 ### 3. Verify it runs by hand
 
-Stop the dev server first — it holds port 5173, and the kiosk will exit with
-`EADDRINUSE` if it's still up.
-
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\kiosk.ps1
 ```
+
+You do **not** need to stop a kiosk you already started by hand. The supervisor
+owns port 5173: if anything else is listening on it — a manually launched kiosk,
+a stray `npm run dev`, an orphaned Electron child — it waits 10s, then kills the
+owning process and takes over.
 
 The kiosk should come up fullscreen. **`Ctrl+Shift+Q` quits it** — the window
 otherwise ignores close requests on purpose. `Ctrl+C` in the terminal stops the
 supervisor.
 
-Progress is written to `kiosk.log` in the repo root.
+Progress is written to `kiosk.log` in the repo root (rotated at 5 MB).
+
+On the first poll after a fresh install there is no `.kiosk-deployed` yet, so the
+supervisor does a full deploy — reset, build, relaunch — even if the repo is
+already up to date. That is expected, and it happens once.
 
 ### 4. Start it at logon
 
