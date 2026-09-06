@@ -3,6 +3,7 @@ import { useDecor } from "../../hooks/useTheme";
 import { JackOLanternShape } from "../theme/JackOLantern";
 import { WitchOnBroomShape } from "../theme/art/WitchOnBroom";
 import { BichonFriseShape } from "../theme/art/BichonFrise";
+import { KittyHeadShape } from "../theme/art/KittyHead";
 
 interface WeatherIconProps {
   condition: WeatherCondition;
@@ -37,7 +38,7 @@ function renderCondition(condition: WeatherCondition, decor: string) {
     if (condition === "partly-cloudy" || condition === "cloudy") return <WitchIcon />;
   }
   if (decor === "gingey") {
-    if (condition === "clear") return <SunIcon color="#a855f7" />;
+    if (condition === "clear") return <KittySunIcon />;
     if (condition === "partly-cloudy" || condition === "cloudy") return <BichonIcon />;
   }
 
@@ -81,6 +82,37 @@ function WitchIcon() {
   );
 }
 
+function KittySunIcon({ color = "#a855f7" }: { color?: string }) {
+  return (
+    <g>
+      <style>{`
+        @keyframes kitty-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes kitty-pulse { 0%,100% { opacity:1; } 50% { opacity:0.78; } }
+        .kitty-rays { animation: kitty-spin 12s linear infinite; transform-origin: 40px 40px; }
+        /* No transform-origin here: it would also re-anchor the transform
+           attribute on this group, shifting the scaled head off the ray ring.
+           The pulse only animates opacity, so it does not need one. */
+        .kitty-core { animation: kitty-pulse 3s ease-in-out infinite; }
+      `}</style>
+      <g className="kitty-rays">
+        {[0, 45, 90, 135, 180, 225, 270, 315].map((angle, i) => (
+          <line
+            key={i}
+            x1="40" y1="8" x2="40" y2="16"
+            stroke={color} strokeWidth="3" strokeLinecap="round"
+            transform={`rotate(${angle} 40 40)`}
+          />
+        ))}
+      </g>
+      {/* 64-grid head scaled to sit inside the ray ring, centred on its face
+          rather than the viewBox (the ears sit above centre) */}
+      <g className="kitty-core" transform="translate(40 40) scale(0.6) translate(-32 -34)">
+        <KittyHeadShape color={color} />
+      </g>
+    </g>
+  );
+}
+
 function BichonIcon() {
   return (
     <g>
@@ -110,7 +142,7 @@ function PumpkinIcon() {
   );
 }
 
-function SunIcon({ color = "#FFD700" }: { color?: string }) {
+function SunIcon() {
   return (
     <g>
       <style>{`
@@ -124,12 +156,12 @@ function SunIcon({ color = "#FFD700" }: { color?: string }) {
           <line
             key={i}
             x1="40" y1="8" x2="40" y2="16"
-            stroke={color} strokeWidth="3" strokeLinecap="round"
+            stroke="#FFD700" strokeWidth="3" strokeLinecap="round"
             transform={`rotate(${angle} 40 40)`}
           />
         ))}
       </g>
-      <circle className="sun-core" cx="40" cy="40" r="16" fill={color} />
+      <circle className="sun-core" cx="40" cy="40" r="16" fill="#FFD700" />
     </g>
   );
 }
