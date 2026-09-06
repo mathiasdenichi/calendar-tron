@@ -1,0 +1,4 @@
+{
+  "_comment": "publicUrl is the address phones use to reach this kiosk - normally the Tailscale MagicDNS name. Set it here and it is used by both the in-app menu and the supervisor's log banner. Leave it empty to fall back to auto-detection via the tailscale CLI. Edit this file in the repo and push: the kiosk does git reset --hard on deploy, so edits made directly on the DreamQuest are discarded.",
+  "publicUrl": ""
+}

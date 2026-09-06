@@ -122,6 +122,21 @@ function Resolve-TailscaleExe {
 function Get-KioskUrls {
     $urls = [ordered]@{ 'local' = "http://localhost:$Port" }
 
+    # Same source of truth as the in-app menu, so the two cannot disagree.
+    try {
+        $configPath = Join-Path $RepoRoot 'kiosk.config.json'
+        if (Test-Path -LiteralPath $configPath) {
+            $cfg = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+            if ($cfg.publicUrl) {
+                $urls['remote'] = ([string]$cfg.publicUrl).TrimEnd('/')
+                return $urls
+            }
+        }
+    }
+    catch {
+        # fall through to auto-detection
+    }
+
     try {
         $exe = Resolve-TailscaleExe
         if (-not $exe) { return $urls }

@@ -2,6 +2,10 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const CONFIG_PATH = path.join(HERE, 'kiosk.config.json');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -27,7 +31,31 @@ const INFO_TTL_MS = 60_000;
 const INFO_FAIL_TTL_MS = 10_000;
 let infoCache = { at: 0, value: null };
 
+let cachedConfig = null;
+
+/** Committed config, so the address ships with the code rather than being set by hand. */
+function readConfig() {
+  if (cachedConfig) return cachedConfig;
+  try {
+    cachedConfig = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+  } catch {
+    cachedConfig = {};
+  }
+  return cachedConfig;
+}
+
+function configuredUrl() {
+  // Env wins so a one-off can override without editing a tracked file.
+  const value = process.env['KIOSK_PUBLIC_URL'] || readConfig().publicUrl;
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
 function tailscaleCandidates() {
+  // Explicit override wins: set TAILSCALE_EXE when the CLI lives somewhere
+  // unusual (Microsoft Store builds, Chocolatey, a custom install dir).
+  const override = process.env['TAILSCALE_EXE'];
+  if (override) return [override];
+
   if (process.platform === 'win32') {
     // execFile does NOT apply PATHEXT, so a bare 'tailscale' fails on Windows
     // even when tailscale.exe is on PATH. Always name the extension.
@@ -36,9 +64,13 @@ function tailscaleCandidates() {
       process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)',
       process.env['LOCALAPPDATA'] || '',
     ].filter(Boolean);
+    const extra = [
+      path.join(process.env['ProgramData'] || 'C:\\ProgramData', 'chocolatey', 'bin', 'tailscale.exe'),
+    ];
     return [
       'tailscale.exe',
       ...dirs.map((dir) => path.join(dir, 'Tailscale', 'tailscale.exe')),
+      ...extra,
     ];
   }
   return ['tailscale', '/usr/local/bin/tailscale', '/opt/homebrew/bin/tailscale'];
@@ -58,6 +90,12 @@ function execTailscale(exe, args) {
  * the host process asks Tailscale and hands the answer down.
  */
 async function readKioskInfo(port) {
+  // A configured address short-circuits discovery entirely.
+  const pinned = configuredUrl();
+  if (pinned) {
+    return { url: pinned.replace(/\/+$/, ''), serving: true, detail: null };
+  }
+
   const tried = [];
 
   for (const exe of tailscaleCandidates()) {
@@ -95,7 +133,9 @@ async function readKioskInfo(port) {
   return {
     url: null,
     serving: false,
-    detail: `Could not run the tailscale CLI. Tried: ${tried.join(', ')}`,
+    detail:
+      `Could not run the tailscale CLI. Tried: ${tried.join(', ')}. ` +
+      'Set publicUrl in kiosk.config.json, or TAILSCALE_EXE to the CLI path.',
   };
 }
 
