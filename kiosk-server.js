@@ -89,13 +89,8 @@ function execTailscale(exe, args) {
  * is always `localhost`, which is precisely the address a phone cannot use. So
  * the host process asks Tailscale and hands the answer down.
  */
-async function readKioskInfo(port) {
-  // A configured address short-circuits discovery entirely.
-  const pinned = configuredUrl();
-  if (pinned) {
-    return { url: pinned.replace(/\/+$/, ''), serving: true, detail: null };
-  }
-
+/** Ask the Tailscale CLI where we are and whether the port is being served. */
+async function detectViaCli(port) {
   const tried = [];
 
   for (const exe of tailscaleCandidates()) {
@@ -109,34 +104,51 @@ async function readKioskInfo(port) {
     try {
       dnsName = JSON.parse(statusRaw)?.Self?.DNSName ?? null;
     } catch {
-      // not JSON — treat like a miss and keep looking
-    }
-
-    if (!dnsName) {
-      // The CLI ran, so stop hunting: this is a Tailscale state problem.
-      return {
-        url: null,
-        serving: false,
-        detail: 'Tailscale is installed but reported no device name - is it logged in and running?',
-      };
+      // not JSON - treat like a miss but the CLI clearly ran
     }
 
     // `serve status` mentioning the port is what makes the URL actually work.
     const serveRaw = await execTailscale(exe, ['serve', 'status']);
-    return {
-      url: `https://${dnsName.replace(/\.$/, '')}`,
-      serving: typeof serveRaw === 'string' && serveRaw.includes(`:${port}`),
-      detail: null,
-    };
+    const serving = typeof serveRaw === 'string' && serveRaw.includes(`:${port}`);
+
+    if (!dnsName) {
+      return {
+        cliRan: true,
+        url: null,
+        serving,
+        detail: 'Tailscale is installed but reported no device name - is it logged in and running?',
+      };
+    }
+
+    return { cliRan: true, url: `https://${dnsName.replace(/\.$/, '')}`, serving, detail: null };
   }
 
   return {
+    cliRan: false,
     url: null,
     serving: false,
     detail:
       `Could not run the tailscale CLI. Tried: ${tried.join(', ')}. ` +
       'Set publicUrl in kiosk.config.json, or TAILSCALE_EXE to the CLI path.',
   };
+}
+
+async function readKioskInfo(port) {
+  const pinned = configuredUrl();
+  const cli = await detectViaCli(port);
+
+  if (pinned) {
+    return {
+      url: pinned.replace(/\/+$/, ''),
+      // A configured URL fixes the address but says nothing about whether
+      // `tailscale serve` is running. Keep checking when the CLI is reachable,
+      // so "set but not actually served" still surfaces as a warning.
+      serving: cli.cliRan ? cli.serving : true,
+      detail: null,
+    };
+  }
+
+  return { url: cli.url, serving: cli.serving, detail: cli.detail };
 }
 
 async function kioskInfo(port) {

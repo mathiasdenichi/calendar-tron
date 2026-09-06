@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Copy, Menu, Palette, RefreshCw } from "lucide-react";
 import { KioskInfo, fetchKioskInfo } from "../../lib/runtime";
+import { QrCode } from "./QrCode";
 
 interface HamburgerMenuProps {
   syncing: boolean;
@@ -130,6 +131,10 @@ export function HamburgerMenu({ syncing, canRefreshPhotos, onRefreshPhotos, onOp
               <span className="text-white/30 text-xs">Checking...</span>
             ) : info.url ? (
               <>
+                <QrCode value={info.url} />
+                <span className="text-white/35 text-[10px] text-center leading-snug">
+                  Scan with your phone camera
+                </span>
                 <div className="flex items-center gap-1.5">
                   <input
                     ref={urlRef}

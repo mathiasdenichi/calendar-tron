@@ -107,6 +107,66 @@ function Stop-PortOwner {
     }
 }
 
+<#
+    Reads kiosk.config.json. Not cached: this process survives many deploys, and
+    a pushed change to the config must take effect on the next read.
+#>
+function Get-KioskConfig {
+    $publicUrl   = ''
+    $manageServe = $false
+
+    try {
+        $configPath = Join-Path $RepoRoot 'kiosk.config.json'
+        if (Test-Path -LiteralPath $configPath) {
+            $raw = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
+            # Check membership first - StrictMode throws on missing properties.
+            $names = $raw.PSObject.Properties.Name
+            if (($names -contains 'publicUrl') -and $raw.publicUrl) {
+                $publicUrl = [string]$raw.publicUrl
+            }
+            if ($names -contains 'manageTailscaleServe') {
+                $manageServe = [bool]$raw.manageTailscaleServe
+            }
+        }
+    }
+    catch {
+        Write-Log "  could not read kiosk.config.json: $_"
+    }
+
+    return [pscustomobject]@{ PublicUrl = $publicUrl; ManageServe = $manageServe }
+}
+
+<#
+    Makes sure `tailscale serve` is proxying our port, so remote access survives
+    a reboot, a serve reset, or a fresh machine without anyone running it by hand.
+    Idempotent, and never fatal.
+#>
+function Set-TailscaleServe {
+    if (-not (Get-KioskConfig).ManageServe) { return }
+
+    $exe = Resolve-TailscaleExe
+    if (-not $exe) {
+        Write-Log '  tailscale CLI not found - skipping serve setup'
+        return
+    }
+
+    $current = (& $exe serve status 2>$null) -join "`n"
+    if ($LASTEXITCODE -eq 0 -and $current -match [regex]::Escape(":$Port")) {
+        Write-Log "  tailscale serve already proxying $Port"
+        return
+    }
+
+    Write-Log "  configuring tailscale serve -> http://localhost:$Port"
+    $r = Invoke-Native -Exe $exe -Arguments @('serve', '--bg', 'https', '/', "http://localhost:$Port")
+    if ($r.ExitCode -ne 0) {
+        Write-Log "  WARNING: tailscale serve failed (exit $($r.ExitCode))"
+        foreach ($l in ($r.Output -split "`n")) { Write-Log "  | $l" }
+        Write-Log '  check that HTTPS Certificates are enabled in the Tailscale admin console'
+        return
+    }
+    Write-Log '  tailscale serve configured'
+}
+
 function Resolve-TailscaleExe {
     $cmd = Get-Command tailscale -ErrorAction SilentlyContinue
     if ($cmd) { return $cmd.Source }
@@ -123,18 +183,10 @@ function Get-KioskUrls {
     $urls = [ordered]@{ 'local' = "http://localhost:$Port" }
 
     # Same source of truth as the in-app menu, so the two cannot disagree.
-    try {
-        $configPath = Join-Path $RepoRoot 'kiosk.config.json'
-        if (Test-Path -LiteralPath $configPath) {
-            $cfg = Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json
-            if ($cfg.publicUrl) {
-                $urls['remote'] = ([string]$cfg.publicUrl).TrimEnd('/')
-                return $urls
-            }
-        }
-    }
-    catch {
-        # fall through to auto-detection
+    $configured = (Get-KioskConfig).PublicUrl
+    if ($configured) {
+        $urls['remote'] = $configured.TrimEnd('/')
+        return $urls
     }
 
     try {
@@ -253,6 +305,7 @@ try {
     if (-not (Test-Path -LiteralPath (Join-Path $RepoRoot 'dist\index.html'))) {
         Invoke-Step 'npm run build (first run)' 'npm.cmd' @('run', 'build')
     }
+    Set-TailscaleServe
     Start-Kiosk
     Write-KioskUrls
 }
@@ -290,6 +343,7 @@ while ($true) {
             Write-Log "new commit $($remote.Substring(0, 7)) - deploying"
             Invoke-Deploy -TargetSha $remote
             Write-Log 'deploy complete'
+            Set-TailscaleServe
             Write-KioskUrls
         }
     }
