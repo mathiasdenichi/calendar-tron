@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Menu, Palette, RefreshCw } from "lucide-react";
+import { Check, Copy, Menu, Palette, RefreshCw } from "lucide-react";
+import { KioskInfo, fetchKioskInfo } from "../../lib/runtime";
 
 interface HamburgerMenuProps {
   syncing: boolean;
@@ -11,7 +12,50 @@ interface HamburgerMenuProps {
 
 export function HamburgerMenu({ syncing, canRefreshPhotos, onRefreshPhotos, onOpenTheme }: HamburgerMenuProps) {
   const [open, setOpen] = useState(false);
+  const [info, setInfo] = useState<KioskInfo | null>(null);
+  const [copied, setCopied] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const urlRef = useRef<HTMLInputElement>(null);
+
+  // Resolved lazily, and re-checked each time the menu opens so a newly
+  // configured `tailscale serve` shows up without restarting the kiosk.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    fetchKioskInfo().then((next) => {
+      if (!cancelled) setInfo(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
+  async function handleCopy() {
+    if (!info?.url) return;
+
+    const confirm = () => {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    };
+
+    // The async clipboard API needs a secure context and a focused document,
+    // so it fails on a plain-http LAN origin. execCommand still works off a
+    // selection, and selecting the text is a usable last resort either way.
+    try {
+      await navigator.clipboard.writeText(info.url);
+      confirm();
+      return;
+    } catch {
+      // fall through
+    }
+
+    urlRef.current?.select();
+    try {
+      if (document.execCommand("copy")) confirm();
+    } catch {
+      // leave it selected for a manual copy
+    }
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -50,7 +94,7 @@ export function HamburgerMenu({ syncing, canRefreshPhotos, onRefreshPhotos, onOp
 
       {open && (
         <div
-          className="absolute top-11 right-0 z-30 w-52 rounded-2xl overflow-hidden
+          className="absolute top-11 right-0 z-30 w-72 rounded-2xl overflow-hidden
             bg-gray-900/95 backdrop-blur-xl border border-white/15 shadow-2xl"
         >
           <MenuItem
@@ -75,6 +119,52 @@ export function HamburgerMenu({ syncing, canRefreshPhotos, onRefreshPhotos, onOp
               />
             </>
           )}
+
+          <div className="h-px bg-white/10" />
+          <div className="px-4 py-3 flex flex-col gap-2">
+            <span className="text-white/45 text-[10px] uppercase tracking-wider">
+              Open on your phone
+            </span>
+
+            {info === null ? (
+              <span className="text-white/30 text-xs">Checking...</span>
+            ) : info.url ? (
+              <>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    ref={urlRef}
+                    value={info.url}
+                    readOnly
+                    spellCheck={false}
+                    aria-label="Kiosk address"
+                    onFocus={(e) => e.currentTarget.select()}
+                    className="flex-1 min-w-0 bg-white/5 border border-white/15 rounded-lg
+                      px-2 py-1.5 text-white/85 text-[11px] font-mono
+                      focus:outline-none focus:border-white/40"
+                  />
+                  <button
+                    onClick={handleCopy}
+                    aria-label="Copy address"
+                    title="Copy address"
+                    className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center
+                      bg-white/5 border border-white/15 text-white/70
+                      hover:text-white hover:bg-white/15 active:scale-95 transition-all"
+                  >
+                    {copied ? <Check size={13} /> : <Copy size={13} />}
+                  </button>
+                </div>
+                {!info.serving && (
+                  <span className="text-amber-400/80 text-[10px] leading-snug">
+                    tailscale serve is not proxying this port yet
+                  </span>
+                )}
+              </>
+            ) : (
+              <span className="text-white/30 text-xs leading-snug">
+                Tailscale address unavailable
+              </span>
+            )}
+          </div>
         </div>
       )}
     </div>
