@@ -150,21 +150,92 @@ function Set-TailscaleServe {
         return
     }
 
-    $current = (& $exe serve status 2>$null) -join "`n"
-    if ($LASTEXITCODE -eq 0 -and $current -match [regex]::Escape(":$Port")) {
+    if (Test-ServeProxying) {
         Write-Log "  tailscale serve already proxying $Port"
         return
     }
 
     Write-Log "  configuring tailscale serve -> http://localhost:$Port"
-    $r = Invoke-Native -Exe $exe -Arguments @('serve', '--bg', 'https', '/', "http://localhost:$Port")
+
+    # Tailscale 1.60 replaced 'serve --bg https / <target>' with a single
+    # <target> argument. The old form does not degrade - it exits 1 with "the
+    # CLI for serve and funnel has changed" and configures nothing.
+    #
+    # Spell the target as localhost rather than the bare-port shorthand: bare
+    # '5173' means 127.0.0.1, but kiosk-server binds the hostname localhost and
+    # on an IPv6-first machine listens on ::1 only, which 127.0.0.1 would miss.
+    $r = Invoke-NativeTimed -Exe $exe -Arguments @('serve', '--bg', "http://localhost:$Port")
     if ($r.ExitCode -ne 0) {
         Write-Log "  WARNING: tailscale serve failed (exit $($r.ExitCode))"
         foreach ($l in ($r.Output -split "`n")) { Write-Log "  | $l" }
-        Write-Log '  check that HTTPS Certificates are enabled in the Tailscale admin console'
+        if ($r.TimedOut -or ($r.Output -match 'not enabled on your tailnet')) {
+            Write-Log '  Serve is disabled for this tailnet - an admin must enable it once,'
+            Write-Log '  via the login.tailscale.com URL above. It sticks after that.'
+        }
+        Write-Log '  also check that HTTPS Certificates are enabled in the admin console'
         return
     }
     Write-Log '  tailscale serve configured'
+}
+
+<#
+    Like Invoke-Native, but cannot hang the supervisor.
+
+    'tailscale serve' blocks indefinitely when Serve is not yet enabled on the
+    tailnet: it prints an enablement URL and waits for a human to click it.
+    Set-TailscaleServe runs before Start-Kiosk, so an unbounded wait means the
+    display never comes up at all. Remote access is optional; the screen is not.
+#>
+function Invoke-NativeTimed {
+    param([string]$Exe, [string[]]$Arguments, [int]$TimeoutSeconds = 20)
+
+    $outFile = [System.IO.Path]::GetTempFileName()
+    $errFile = [System.IO.Path]::GetTempFileName()
+    try {
+        $p = Start-Process -FilePath $Exe -ArgumentList $Arguments -NoNewWindow -PassThru `
+                           -RedirectStandardOutput $outFile -RedirectStandardError $errFile
+
+        # Read .Handle while the process is still alive. Start-Process -PassThru
+        # hands back a Process that has not cached its OS handle, and once the
+        # process exits the handle is gone and .ExitCode reads back empty - so
+        # every success would compare -ne 0 and be logged as a failure. Touching
+        # .Handle here retains it and makes .ExitCode readable afterwards.
+        $null = $p.Handle
+
+        if (-not $p.WaitForExit($TimeoutSeconds * 1000)) {
+            # /T because the CLI may have spawned helpers while waiting.
+            & taskkill '/F' '/T' '/PID' "$($p.Id)" 2>&1 | Out-Null
+            $partial = (Get-Content -LiteralPath $outFile -Raw -ErrorAction SilentlyContinue)
+            return [pscustomobject]@{
+                ExitCode = -1
+                Output   = (("timed out after $TimeoutSeconds s", $partial) -join [Environment]::NewLine).Trim()
+                TimedOut = $true
+            }
+        }
+
+        $text = (Get-Content -LiteralPath $outFile -Raw -ErrorAction SilentlyContinue),
+                (Get-Content -LiteralPath $errFile -Raw -ErrorAction SilentlyContinue)
+        return [pscustomobject]@{
+            ExitCode = $p.ExitCode
+            Output   = ($text -join [Environment]::NewLine).Trim()
+            TimedOut = $false
+        }
+    }
+    finally {
+        Remove-Item -LiteralPath $outFile, $errFile -Force -ErrorAction SilentlyContinue
+    }
+}
+
+<#
+    True only when `tailscale serve` is really proxying our port. A configured
+    publicUrl states where the kiosk ought to be reachable, which is not
+    evidence that it is - so the banner checks this on both paths.
+#>
+function Test-ServeProxying {
+    $exe = Resolve-TailscaleExe
+    if (-not $exe) { return $false }
+    $serve = (& $exe serve status 2>$null) -join "`n"
+    return ($LASTEXITCODE -eq 0 -and $serve -match [regex]::Escape(":$Port"))
 }
 
 function Resolve-TailscaleExe {
@@ -186,6 +257,11 @@ function Get-KioskUrls {
     $configured = (Get-KioskConfig).PublicUrl
     if ($configured) {
         $urls['remote'] = $configured.TrimEnd('/')
+        # Warn here too. Setting publicUrl used to skip this check entirely, so
+        # the banner printed a clean URL for a proxy that was never configured.
+        if (-not (Test-ServeProxying)) {
+            $urls['remote'] += '   (WARNING: tailscale serve not proxying ' + $Port + ')'
+        }
         return $urls
     }
 
@@ -204,8 +280,7 @@ function Get-KioskUrls {
         $urls['remote'] = 'https://' + $dns.TrimEnd('.')
 
         # Reachable only if `tailscale serve` is actually proxying this port.
-        $serve = (& $exe serve status 2>$null) -join "`n"
-        if ($LASTEXITCODE -ne 0 -or ($serve -notmatch [regex]::Escape(":$Port"))) {
+        if (-not (Test-ServeProxying)) {
             $urls['remote'] += '   (WARNING: tailscale serve not proxying ' + $Port + ')'
         }
     }
