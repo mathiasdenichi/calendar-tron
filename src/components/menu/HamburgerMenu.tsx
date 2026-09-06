@@ -160,9 +160,16 @@ export function HamburgerMenu({ syncing, canRefreshPhotos, onRefreshPhotos, onOp
                 )}
               </>
             ) : (
-              <span className="text-white/30 text-xs leading-snug">
-                Tailscale address unavailable
-              </span>
+              <div className="flex flex-col gap-1">
+                <span className="text-white/30 text-xs leading-snug">
+                  Tailscale address unavailable
+                </span>
+                {info.detail && (
+                  <span className="text-white/25 text-[10px] leading-snug break-words">
+                    {info.detail}
+                  </span>
+                )}
+              </div>
             )}
           </div>
         </div>

@@ -22,6 +22,8 @@ export interface KioskInfo {
   url: string | null;
   /** Whether `tailscale serve` is actually proxying the kiosk port. */
   serving: boolean;
+  /** Why the URL is missing, when it is. */
+  detail?: string | null;
 }
 
 const INFO_PATH = "/__kiosk/info";
@@ -40,6 +42,7 @@ export async function fetchKioskInfo(): Promise<KioskInfo> {
     return {
       url: typeof data?.url === "string" ? data.url : null,
       serving: data?.serving === true,
+      detail: typeof data?.detail === "string" ? data.detail : null,
     };
   } catch {
     return { url: null, serving: false };

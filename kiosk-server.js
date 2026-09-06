@@ -24,17 +24,24 @@ const MIME = {
 export const INFO_PATH = '/__kiosk/info';
 
 const INFO_TTL_MS = 60_000;
+const INFO_FAIL_TTL_MS = 10_000;
 let infoCache = { at: 0, value: null };
 
 function tailscaleCandidates() {
-  const candidates = ['tailscale'];
   if (process.platform === 'win32') {
-    const programFiles = process.env['ProgramFiles'] || 'C:\\Program Files';
-    candidates.push(path.join(programFiles, 'Tailscale', 'tailscale.exe'));
-  } else {
-    candidates.push('/usr/local/bin/tailscale', '/opt/homebrew/bin/tailscale');
+    // execFile does NOT apply PATHEXT, so a bare 'tailscale' fails on Windows
+    // even when tailscale.exe is on PATH. Always name the extension.
+    const dirs = [
+      process.env['ProgramFiles'] || 'C:\\Program Files',
+      process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)',
+      process.env['LOCALAPPDATA'] || '',
+    ].filter(Boolean);
+    return [
+      'tailscale.exe',
+      ...dirs.map((dir) => path.join(dir, 'Tailscale', 'tailscale.exe')),
+    ];
   }
-  return candidates;
+  return ['tailscale', '/usr/local/bin/tailscale', '/opt/homebrew/bin/tailscale'];
 }
 
 function execTailscale(exe, args) {
@@ -51,34 +58,59 @@ function execTailscale(exe, args) {
  * the host process asks Tailscale and hands the answer down.
  */
 async function readKioskInfo(port) {
+  const tried = [];
+
   for (const exe of tailscaleCandidates()) {
     const statusRaw = await execTailscale(exe, ['status', '--json']);
-    if (!statusRaw) continue;
+    if (!statusRaw) {
+      tried.push(exe);
+      continue;
+    }
 
     let dnsName = null;
     try {
       dnsName = JSON.parse(statusRaw)?.Self?.DNSName ?? null;
     } catch {
-      // not JSON — try the next candidate
+      // not JSON — treat like a miss and keep looking
     }
-    if (!dnsName) continue;
+
+    if (!dnsName) {
+      // The CLI ran, so stop hunting: this is a Tailscale state problem.
+      return {
+        url: null,
+        serving: false,
+        detail: 'Tailscale is installed but reported no device name - is it logged in and running?',
+      };
+    }
 
     // `serve status` mentioning the port is what makes the URL actually work.
     const serveRaw = await execTailscale(exe, ['serve', 'status']);
     return {
       url: `https://${dnsName.replace(/\.$/, '')}`,
       serving: typeof serveRaw === 'string' && serveRaw.includes(`:${port}`),
+      detail: null,
     };
   }
 
-  return { url: null, serving: false };
+  return {
+    url: null,
+    serving: false,
+    detail: `Could not run the tailscale CLI. Tried: ${tried.join(', ')}`,
+  };
 }
 
 async function kioskInfo(port) {
   const now = Date.now();
-  if (infoCache.value && now - infoCache.at < INFO_TTL_MS) return infoCache.value;
+  if (infoCache.value) {
+    const ttl = infoCache.value.url ? INFO_TTL_MS : INFO_FAIL_TTL_MS;
+    if (now - infoCache.at < ttl) return infoCache.value;
+  }
 
-  const value = await readKioskInfo(port).catch(() => ({ url: null, serving: false }));
+  const value = await readKioskInfo(port).catch((err) => ({
+    url: null,
+    serving: false,
+    detail: `Lookup failed: ${err?.message ?? err}`,
+  }));
   infoCache = { at: now, value };
   return value;
 }
