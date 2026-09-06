@@ -2,6 +2,8 @@ import { useRef } from "react";
 import { CalendarEvent, DatePhoto } from "../../types";
 import { useDecor } from "../../hooks/useTheme";
 import { JackOLantern, PUMPKIN_BODY_OFFSET } from "../theme/JackOLantern";
+import { Skull } from "../theme/art/Skull";
+import { KittyHead, KITTY_FACE_OFFSET } from "../theme/art/KittyHead";
 
 interface DayCellProps {
   date: Date | null;
@@ -14,7 +16,11 @@ interface DayCellProps {
 
 export function DayCell({ date, isCurrentMonth, isToday, events, photos, onDoubleTap }: DayCellProps) {
   const lastTapRef = useRef<number>(0);
-  const spooky = useDecor() === "halloween";
+  const decor = useDecor();
+  const spooky = decor === "halloween";
+  const gingey = decor === "gingey";
+  // Any decor preset drives today's ring and wash from the theme, not blue.
+  const decorated = decor !== "none";
 
   if (!date) {
     return <div className="bg-transparent border border-gray-800/20 rounded-xl" />;
@@ -45,7 +51,7 @@ export function DayCell({ date, isCurrentMonth, isToday, events, photos, onDoubl
     <div
       className={`relative border rounded-xl flex flex-col overflow-hidden cursor-pointer transition-all duration-150 select-none
         ${isToday
-          ? spooky ? "border-[color:var(--cal-event)]" : "border-blue-500/70"
+          ? decorated ? "border-[color:var(--cal-event)]" : "border-blue-500/70"
           : isCurrentMonth
           ? "border-gray-700/40 hover:border-gray-600/60"
           : "border-gray-800/20 opacity-40"
@@ -68,11 +74,11 @@ export function DayCell({ date, isCurrentMonth, isToday, events, photos, onDoubl
         <div
           className={`absolute inset-0 ${
             isToday
-              ? spooky ? "" : "bg-blue-950/30"
+              ? decorated ? "" : "bg-blue-950/30"
               : isCurrentMonth ? "bg-gray-800/20" : "bg-gray-900/10"
           }`}
           style={
-            isToday && spooky
+            isToday && decorated
               ? { backgroundColor: "color-mix(in srgb, var(--cal-event) 12%, transparent)" }
               : undefined
           }
@@ -88,6 +94,34 @@ export function DayCell({ date, isCurrentMonth, isToday, events, photos, onDoubl
             <span
               className="relative text-xs font-bold text-black leading-none"
               style={{ transform: `translateY(${28 * PUMPKIN_BODY_OFFSET}px)` }}
+            >
+              {date.getDate()}
+            </span>
+          </span>
+        ) : isToday && gingey ? (
+          <span className="relative w-7 h-7 flex items-center justify-center">
+            <KittyHead size={30} showFace={false} className="absolute -inset-px" />
+            <span
+              className="relative text-xs font-bold leading-none"
+              style={{
+                color: "#2a1b3d",
+                transform: `translateY(${30 * KITTY_FACE_OFFSET}px)`,
+              }}
+            >
+              {date.getDate()}
+            </span>
+          </span>
+        ) : spooky ? (
+          // Every other day sits on a skull. Kept faint so the number still
+          // carries at a glance from across the room.
+          <span className="relative w-7 h-7 flex items-center justify-center">
+            <Skull size={32} className="absolute inset-0 m-auto opacity-40" />
+            <span
+              className={`relative text-sm font-semibold ${!isCurrentMonth ? "opacity-40" : ""}`}
+              style={{
+                color: hasPhoto ? "#ffffff" : "var(--cal-date)",
+                textShadow: "0 1px 3px rgba(0,0,0,0.9)",
+              }}
             >
               {date.getDate()}
             </span>

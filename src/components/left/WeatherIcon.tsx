@@ -1,6 +1,8 @@
 import { WeatherCondition } from "../../lib/weatherCodes";
 import { useDecor } from "../../hooks/useTheme";
 import { JackOLanternShape } from "../theme/JackOLantern";
+import { WitchOnBroomShape } from "../theme/art/WitchOnBroom";
+import { BichonFriseShape } from "../theme/art/BichonFrise";
 
 interface WeatherIconProps {
   condition: WeatherCondition;
@@ -10,9 +12,6 @@ interface WeatherIconProps {
 
 export function WeatherIcon({ condition, size = 80, className = "" }: WeatherIconProps) {
   const decor = useDecor();
-  // Halloween swaps every sun for a jack-o'-lantern; the two sun-bearing
-  // conditions are "clear" and the sun peeking out of "partly-cloudy".
-  const spooky = decor === "halloween";
 
   return (
     <svg
@@ -23,16 +22,76 @@ export function WeatherIcon({ condition, size = 80, className = "" }: WeatherIco
       xmlns="http://www.w3.org/2000/svg"
       className={className}
     >
-      {condition === "clear" && (spooky ? <PumpkinIcon /> : <SunIcon />)}
-      {condition === "partly-cloudy" && (spooky ? <PartlyPumpkinIcon /> : <PartlyCloudyIcon />)}
-      {condition === "cloudy" && <CloudIcon />}
-      {condition === "foggy" && <FogIcon />}
-      {condition === "drizzle" && <DrizzleIcon />}
-      {condition === "rain" && <RainIcon />}
-      {condition === "heavy-rain" && <HeavyRainIcon />}
-      {condition === "snow" && <SnowIcon />}
-      {condition === "thunderstorm" && <ThunderstormIcon />}
+      {renderCondition(condition, decor)}
     </svg>
+  );
+}
+
+/**
+ * Decor presets override only the sun and cloud conditions; rain, snow, fog and
+ * storms keep their standard artwork so the forecast stays readable at a glance.
+ */
+function renderCondition(condition: WeatherCondition, decor: string) {
+  if (decor === "halloween") {
+    if (condition === "clear") return <PumpkinIcon />;
+    if (condition === "partly-cloudy" || condition === "cloudy") return <WitchIcon />;
+  }
+  if (decor === "gingey") {
+    if (condition === "clear") return <SunIcon color="#a855f7" />;
+    if (condition === "partly-cloudy" || condition === "cloudy") return <BichonIcon />;
+  }
+
+  switch (condition) {
+    case "clear":
+      return <SunIcon />;
+    case "partly-cloudy":
+      return <PartlyCloudyIcon />;
+    case "cloudy":
+      return <CloudIcon />;
+    case "foggy":
+      return <FogIcon />;
+    case "drizzle":
+      return <DrizzleIcon />;
+    case "rain":
+      return <RainIcon />;
+    case "heavy-rain":
+      return <HeavyRainIcon />;
+    case "snow":
+      return <SnowIcon />;
+    case "thunderstorm":
+      return <ThunderstormIcon />;
+    default:
+      return <CloudIcon />;
+  }
+}
+
+function WitchIcon() {
+  return (
+    <g>
+      <style>{`
+        @keyframes witch-fly { 0%,100%{transform:translate(0,0)} 50%{transform:translate(2px,-2.5px)} }
+        @keyframes coven-glow { 0%,100%{opacity:1} 50%{opacity:0.72} }
+        .witch-rider { animation: witch-fly 4.5s ease-in-out infinite; }
+        .witch-glow { animation: coven-glow 3s ease-in-out infinite; }
+      `}</style>
+      <g className="witch-glow">
+        <WitchOnBroomShape />
+      </g>
+    </g>
+  );
+}
+
+function BichonIcon() {
+  return (
+    <g>
+      <style>{`
+        @keyframes bichon-bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-2px)} }
+        .bichon { animation: bichon-bob 4s ease-in-out infinite; transform-origin: 40px 40px; }
+      `}</style>
+      <g className="bichon" transform="translate(8 8)">
+        <BichonFriseShape />
+      </g>
+    </g>
   );
 }
 
@@ -51,29 +110,7 @@ function PumpkinIcon() {
   );
 }
 
-function PartlyPumpkinIcon() {
-  return (
-    <g>
-      <style>{`
-        @keyframes sun-peek { 0%,100%{transform:translateX(0)} 50%{transform:translateX(-3px)} }
-        @keyframes cloud-drift { 0%,100%{transform:translateX(0)} 50%{transform:translateX(3px)} }
-        .pp-pumpkin { animation: sun-peek 4s ease-in-out infinite; }
-        .pp-cloud { animation: cloud-drift 4s ease-in-out infinite; }
-      `}</style>
-      <g className="pp-pumpkin" transform="translate(6 2) scale(0.72)">
-        <JackOLanternShape />
-      </g>
-      <g className="pp-cloud">
-        <ellipse cx="44" cy="48" rx="18" ry="12" fill="white" opacity="0.95" />
-        <circle cx="32" cy="48" r="10" fill="white" opacity="0.95" />
-        <circle cx="50" cy="44" r="12" fill="white" opacity="0.95" />
-        <rect x="24" y="48" width="38" height="12" fill="white" opacity="0.95" />
-      </g>
-    </g>
-  );
-}
-
-function SunIcon() {
+function SunIcon({ color = "#FFD700" }: { color?: string }) {
   return (
     <g>
       <style>{`
@@ -87,12 +124,12 @@ function SunIcon() {
           <line
             key={i}
             x1="40" y1="8" x2="40" y2="16"
-            stroke="#FFD700" strokeWidth="3" strokeLinecap="round"
+            stroke={color} strokeWidth="3" strokeLinecap="round"
             transform={`rotate(${angle} 40 40)`}
           />
         ))}
       </g>
-      <circle className="sun-core" cx="40" cy="40" r="16" fill="#FFD700" />
+      <circle className="sun-core" cx="40" cy="40" r="16" fill={color} />
     </g>
   );
 }

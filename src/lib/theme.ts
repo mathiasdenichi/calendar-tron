@@ -9,7 +9,7 @@ export type ThemeColorKey =
   | "timeColor";
 
 /** Non-color decoration a preset can switch on (icon swaps, day markers). */
-export type DecorId = "none" | "halloween";
+export type DecorId = "none" | "halloween" | "gingey";
 
 export interface Theme {
   colors: Record<ThemeColorKey, string>;
@@ -59,6 +59,10 @@ export interface Preset {
 
 // Deep saffron — the CSS-named saffron orange, and legible on black.
 const SAFFRON = "#ff9933";
+// Two tiers of the same purple: the lighter one carries the small text so it
+// stays readable against dark grey.
+const PURPLE = "#a855f7";
+const PURPLE_LIGHT = "#c9a6fb";
 
 export const PRESETS: Preset[] = [
   {
@@ -83,19 +87,18 @@ export const PRESETS: Preset[] = [
     decor: "halloween",
   },
   {
-    id: "gingerbread",
+    id: "gingey",
     label: "Gingey Holiday",
-    emoji: "🍪",
+    emoji: "🐩",
     colors: {
-      background: "#2b1608",
-      titleText: "#f5c98a",
-      dateText: "#ffe9c9",
-      subText: "#d9a86c",
-      eventColor: "#e08b3e",
-      timeColor: "#f5c98a",
+      background: "#2d2d33",
+      titleText: PURPLE,
+      dateText: PURPLE_LIGHT,
+      subText: PURPLE_LIGHT,
+      eventColor: PURPLE,
+      timeColor: PURPLE,
     },
-    decor: "none",
-    provisional: true,
+    decor: "gingey",
   },
   {
     id: "thanksgiving",
@@ -162,7 +165,9 @@ export function loadTheme(): Theme {
       if (valid) colors[key] = valid;
     }
 
-    const decor: DecorId = parsed?.decor === "halloween" ? "halloween" : "none";
+    const storedDecor = parsed?.decor;
+    const decor: DecorId =
+      storedDecor === "halloween" || storedDecor === "gingey" ? storedDecor : "none";
     const presetId = typeof parsed?.presetId === "string" ? presetById(parsed.presetId).id : "default";
 
     return { colors, decor, presetId };
