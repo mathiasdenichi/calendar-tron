@@ -121,6 +121,22 @@ If a build fails, the running app is left alone and the deploy is retried on the
 next poll — the last successfully deployed SHA is tracked in `.kiosk-deployed`,
 not in `HEAD`, so a broken commit can't strand the kiosk on a half-deploy.
 
+After every successful deploy — and once at startup — the supervisor prints
+where the kiosk can be reached:
+
+```
+2026-09-06 14:22:31  deploy complete
+2026-09-06 14:22:31    ----------------------------------------------------------
+2026-09-06 14:22:31     local   http://localhost:5173
+2026-09-06 14:22:31     remote  https://dreamquest.tail1a2b3.ts.net
+2026-09-06 14:22:31    ----------------------------------------------------------
+```
+
+The remote line is the URL to open on a phone and Add to Home Screen. If
+`tailscale serve` isn't actually proxying port 5173 the line says so, which is
+the usual reason the phone can't reach it. Tailscale being absent or logged out
+only drops the remote line; it never fails a deploy.
+
 Adjust `$PollSeconds` at the top of the script to taste.
 
 > **`git reset --hard` discards local commits and edits in the kiosk's working
