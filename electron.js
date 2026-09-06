@@ -20,7 +20,15 @@ const DIST = path.join(__dirname, 'dist');
 // kiosk-server.js is a static file server only; there is no dev server, no HMR,
 // and no second Node process. Vite's output is a single minified bundle.
 const PORT = Number(process.env.KIOSK_PORT) || 5173;
-const HOST = 'localhost';
+
+// Default binds loopback only: nothing outside this machine can reach it, which
+// is what you want when Tailscale (or any reverse proxy) fronts it locally.
+// Set KIOSK_HOST=0.0.0.0 to also answer on the LAN — note the app has no auth.
+//
+// 'localhost' rather than '127.0.0.1' on purpose: the window loads
+// http://localhost:5173, so Node and Chromium must resolve it the same way or
+// the kiosk hits a connection refused on an IPv6-first machine.
+const HOST = process.env.KIOSK_HOST || 'localhost';
 
 // Set KIOSK_DEV_URL to point at a running `npm run dev` instead of dist/.
 const devUrl = process.env.KIOSK_DEV_URL;

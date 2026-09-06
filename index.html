@@ -2,17 +2,21 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover so the layout can reach under the iPhone notch -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>CALENDAR TRON</title>
-    <meta
-      property="og:image"
-      content="https://bolt.new/static/og_default.png"
-    />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta
-      name="twitter:image"
-      content="https://bolt.new/static/og_default.png"
-    />
+
+    <!-- Installable web app. Add to Home Screen works over plain HTTP, but a
+         service worker would need HTTPS — see docs/kiosk-setup.md. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#030712" />
+
+    <!-- iOS ignores the manifest for some of this and needs its own tags -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="Calendar" />
   </head>
   <body>
     <div id="root"></div>

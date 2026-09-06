@@ -3,11 +3,13 @@ import { Menu, Palette, RefreshCw } from "lucide-react";
 
 interface HamburgerMenuProps {
   syncing: boolean;
+  /** Photo sync only exists on the kiosk, so the item is hidden elsewhere. */
+  canRefreshPhotos: boolean;
   onRefreshPhotos: () => void;
   onOpenTheme: () => void;
 }
 
-export function HamburgerMenu({ syncing, onRefreshPhotos, onOpenTheme }: HamburgerMenuProps) {
+export function HamburgerMenu({ syncing, canRefreshPhotos, onRefreshPhotos, onOpenTheme }: HamburgerMenuProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -59,16 +61,20 @@ export function HamburgerMenu({ syncing, onRefreshPhotos, onOpenTheme }: Hamburg
               onOpenTheme();
             }}
           />
-          <div className="h-px bg-white/10" />
-          <MenuItem
-            icon={<RefreshCw size={16} className={syncing ? "animate-spin" : ""} />}
-            label={syncing ? "Refreshing…" : "Refresh photos"}
-            disabled={syncing}
-            onClick={() => {
-              setOpen(false);
-              onRefreshPhotos();
-            }}
-          />
+          {canRefreshPhotos && (
+            <>
+              <div className="h-px bg-white/10" />
+              <MenuItem
+                icon={<RefreshCw size={16} className={syncing ? "animate-spin" : ""} />}
+                label={syncing ? "Refreshing…" : "Refresh photos"}
+                disabled={syncing}
+                onClick={() => {
+                  setOpen(false);
+                  onRefreshPhotos();
+                }}
+              />
+            </>
+          )}
         </div>
       )}
     </div>

@@ -5,6 +5,7 @@ import { PhotoStrip } from "./PhotoStrip";
 import { PhotoProgressBar } from "./PhotoProgressBar";
 import { HamburgerMenu } from "../menu/HamburgerMenu";
 import { useICloudPhotos } from "../../hooks/useICloudPhotos";
+import { isKiosk } from "../../lib/runtime";
 
 interface LeftPanelProps {
   onOpenRadar: () => void;
@@ -22,7 +23,12 @@ export function LeftPanel({ onOpenRadar, onOpenTheme }: LeftPanelProps) {
       <div className="relative z-10 h-full flex flex-col p-8">
         <div className="pt-2 flex items-start justify-between">
           <Clock />
-          <HamburgerMenu syncing={syncing} onRefreshPhotos={syncNow} onOpenTheme={onOpenTheme} />
+          <HamburgerMenu
+            syncing={syncing}
+            canRefreshPhotos={isKiosk()}
+            onRefreshPhotos={syncNow}
+            onOpenTheme={onOpenTheme}
+          />
         </div>
 
         <div className="flex-1" />

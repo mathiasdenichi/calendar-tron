@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import axios from "axios";
 import { getImageUrls, getAllKeys, removeImages, downloadAndStore } from "../lib/localImageStore";
+import { isKiosk } from "../lib/runtime";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
@@ -133,6 +134,9 @@ export function useICloudPhotos() {
   }, []);
 
   const runSync = useCallback(async (showSyncing = false) => {
+    // Only the kiosk caches photos. See isKiosk() — a phone would pull the whole
+    // library over its data plan, and the slideshow is a wall-display feature.
+    if (!isKiosk()) return;
     if (showSyncing) setSyncing(true);
     try {
       const token = import.meta.env.VITE_ICLOUD_PHOTOS_TOKEN as string | undefined;
@@ -213,6 +217,11 @@ export function useICloudPhotos() {
 
   useEffect(() => {
     async function init() {
+      if (!isKiosk()) {
+        setLoading(false);
+        return;
+      }
+
       const localPhotos = await loadFromLocal();
 
       if (localPhotos.length > 0) {
@@ -231,6 +240,7 @@ export function useICloudPhotos() {
 
     init();
 
+    if (!isKiosk()) return;
     const refreshInterval = setInterval(() => runSync(false), 24 * 60 * 60 * 1000);
     return () => clearInterval(refreshInterval);
   }, [loadFromLocal, runSync]);
@@ -264,6 +274,7 @@ export function useICloudPhotos() {
 
 // Exported for useCalendar gallery loader
 export async function loadLocalGalleryPhotos(offset = 0, pageSize = 25): Promise<{ photos: SlideshowPhoto[]; hasMore: boolean }> {
+  if (!isKiosk()) return { photos: [], hasMore: false };
   const metas = loadStoredMeta().filter((m) => !VIDEO_EXTS.test(m.originalUrl));
   if (metas.length === 0) return { photos: [], hasMore: false };
 
