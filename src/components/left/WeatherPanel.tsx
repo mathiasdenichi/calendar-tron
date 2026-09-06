@@ -36,12 +36,16 @@ export function WeatherPanel({ onOpenRadar }: WeatherPanelProps) {
   const condition = getWeatherCondition(weather.current.weatherCode);
   const description = getWeatherDescription(weather.current.weatherCode);
   const todayForecast = weather.daily[0];
-  const forecastDays = weather.daily.slice(1, 6);
+  // Everything except today, which is already shown in the current-weather block.
+  const forecastDays = weather.daily.slice(1);
 
   return (
     <div ref={containerRef} className="w-full">
       <div className="flex gap-2 items-end">
-        <div className="flex flex-col flex-1 gap-2">
+        {/* min-w-0 is load-bearing: a flex item defaults to min-width:auto, so
+            the hourly strip's max-content width would otherwise force this
+            column wider than the panel and push RadarBox out of view. */}
+        <div className="flex flex-col flex-1 min-w-0 gap-2">
           <CurrentWeather
             temperature={weather.current.temperature}
             condition={condition}
@@ -50,21 +54,25 @@ export function WeatherPanel({ onOpenRadar }: WeatherPanelProps) {
             windSpeed={weather.current.windSpeed}
           />
           <HourlyStrip hours={weather.hourly} />
-          <div className="flex gap-2">
-            {forecastDays.map((day) => {
-              const dc = getWeatherCondition(day.weatherCode);
-              return (
-                <div
-                  key={day.date}
-                  className="flex-1 bg-black/20 backdrop-blur-sm rounded-xl p-2 flex flex-col items-center gap-1 border border-white/10"
-                >
-                  <span className="text-white/70 text-xs font-medium">{day.dayLabel}</span>
-                  <WeatherIcon condition={dc} size={32} />
-                  <span className="text-white text-sm font-medium">{day.maxTemp}°</span>
-                  <span className="text-white/50 text-xs">{day.minTemp}°</span>
-                </div>
-              );
-            })}
+          <div className="w-full min-w-0 overflow-x-auto overscroll-x-contain touch-pan-x">
+            <div className="flex gap-2">
+              {forecastDays.map((day) => {
+                const dc = getWeatherCondition(day.weatherCode);
+                return (
+                  <div
+                    key={day.date}
+                    // Stretches to fill when there's room, but stops shrinking at
+                    // 56px — past that the row scrolls instead of crushing cards.
+                    className="flex-1 min-w-[56px] bg-black/20 backdrop-blur-sm rounded-xl p-2 flex flex-col items-center gap-1 border border-white/10"
+                  >
+                    <span className="text-white/70 text-xs font-medium">{day.dayLabel}</span>
+                    <WeatherIcon condition={dc} size={32} />
+                    <span className="text-white text-sm font-medium">{day.maxTemp}°</span>
+                    <span className="text-white/50 text-xs">{day.minTemp}°</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
 

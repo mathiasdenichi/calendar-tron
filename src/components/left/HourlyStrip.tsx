@@ -11,7 +11,9 @@ export function HourlyStrip({ hours }: HourlyStripProps) {
   if (hours.length === 0) return null;
 
   return (
-    <div className="w-full overflow-x-auto overflow-y-hidden">
+    // touch-pan-x overrides the global `* { touch-action: manipulation }` so a
+    // horizontal drag scrolls this strip rather than being treated as a tap.
+    <div className="w-full min-w-0 overflow-x-auto overflow-y-hidden overscroll-x-contain touch-pan-x">
       <div className="flex gap-2 w-max">
         {hours.map((hour, i) => {
           const isNow = i === 0;

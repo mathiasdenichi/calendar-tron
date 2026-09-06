@@ -9,6 +9,9 @@ const TZ = "America/New_York";
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 const HOURS_AHEAD = 12;
+// Today plus six days. Six is deliberate: a seventh would repeat today's
+// weekday label, and it gives the daily row enough cards to actually scroll.
+const FORECAST_DAYS = 7;
 const REFRESH_MS = 10 * 60 * 1000;
 
 /** "2026-09-06T15:00" -> "3PM". */
@@ -92,10 +95,10 @@ export function useWeather() {
         `&hourly=temperature_2m,relativehumidity_2m,weathercode` +
         `&daily=temperature_2m_max,temperature_2m_min,weathercode` +
         `&temperature_unit=fahrenheit&windspeed_unit=mph` +
-        `&timezone=${encodeURIComponent(TZ)}&forecast_days=6`;
+        `&timezone=${encodeURIComponent(TZ)}&forecast_days=${FORECAST_DAYS}`;
       const { data } = await axios.get(url);
 
-      const daily = data.daily.time.slice(0, 6).map((dateStr: string, i: number) => {
+      const daily = data.daily.time.slice(0, FORECAST_DAYS).map((dateStr: string, i: number) => {
         const d = new Date(dateStr + "T00:00:00");
         return {
           date: dateStr,
