@@ -1,23 +1,33 @@
-import { useCallback, useLayoutEffect, useState } from "react";
+import { useCallback, useLayoutEffect, useState, useSyncExternalStore } from "react";
 import { normalizeHex } from "../lib/color";
 import {
-  DEFAULT_THEME,
+  DecorId,
   MAX_SWATCHES,
+  Preset,
   Theme,
-  ThemeKey,
+  ThemeColorKey,
   applyTheme,
+  getDecor,
   loadSwatches,
   loadTheme,
+  presetById,
   saveSwatches,
   saveTheme,
+  subscribeDecor,
+  themeFromPreset,
 } from "../lib/theme";
+
+/** Subscribes any component to decor changes without prop drilling. */
+export function useDecor(): DecorId {
+  return useSyncExternalStore(subscribeDecor, getDecor, getDecor);
+}
 
 export function useTheme() {
   const [theme, setTheme] = useState<Theme>(loadTheme);
   const [swatches, setSwatches] = useState<string[]>(loadSwatches);
 
   // Layout effect, not effect: the vars must be on the document before the
-  // browser paints, or the calendar flashes the default palette first.
+  // browser paints, or the calendar flashes the previous palette first.
   useLayoutEffect(() => {
     applyTheme(theme);
     saveTheme(theme);
@@ -27,14 +37,26 @@ export function useTheme() {
     saveSwatches(swatches);
   }, [swatches]);
 
-  const setColor = useCallback((key: ThemeKey, hex: string) => {
+  const setColor = useCallback((key: ThemeColorKey, hex: string) => {
     const valid = normalizeHex(hex);
     if (!valid) return;
-    setTheme((prev) => (prev[key] === valid ? prev : { ...prev, [key]: valid }));
+    setTheme((prev) =>
+      prev.colors[key] === valid
+        ? prev
+        : { ...prev, colors: { ...prev.colors, [key]: valid } }
+    );
   }, []);
 
-  const resetColor = useCallback((key: ThemeKey) => {
-    setTheme((prev) => ({ ...prev, [key]: DEFAULT_THEME[key] }));
+  /** Restores one color to the active preset's value, not the app default. */
+  const resetColor = useCallback((key: ThemeColorKey) => {
+    setTheme((prev) => ({
+      ...prev,
+      colors: { ...prev.colors, [key]: presetById(prev.presetId).colors[key] },
+    }));
+  }, []);
+
+  const applyPreset = useCallback((preset: Preset) => {
+    setTheme(themeFromPreset(preset));
   }, []);
 
   const saveSwatch = useCallback((hex: string) => {
@@ -47,5 +69,5 @@ export function useTheme() {
     setSwatches((prev) => prev.filter((s) => s !== hex));
   }, []);
 
-  return { theme, swatches, setColor, resetColor, saveSwatch, removeSwatch };
+  return { theme, swatches, setColor, resetColor, applyPreset, saveSwatch, removeSwatch };
 }

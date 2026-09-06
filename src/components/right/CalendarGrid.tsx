@@ -71,10 +71,14 @@ export function CalendarGrid({ eventsByDate, photosByDate, onDayDoubleTap }: Cal
         </button>
 
         <div className="flex items-center gap-3">
-          <h2 className="text-white font-semibold text-2xl tracking-tight">{monthLabel}</h2>
+          <h2 className="font-semibold text-2xl tracking-tight" style={{ color: "var(--cal-title)" }}>{monthLabel}</h2>
           <button
             onClick={goToday}
-            className="text-xs text-blue-400 hover:text-blue-300 border border-blue-500/40 hover:border-blue-400 px-3 py-1 rounded-full transition-colors"
+            className="text-xs px-3 py-1 rounded-full border transition-colors hover:opacity-80"
+            style={{
+              color: "var(--cal-title)",
+              borderColor: "color-mix(in srgb, var(--cal-title) 45%, transparent)",
+            }}
           >
             Today
           </button>
@@ -129,11 +133,11 @@ export function CalendarGrid({ eventsByDate, photosByDate, onDayDoubleTap }: Cal
       <div className="flex items-center gap-4 mt-3 px-1 flex-wrap">
         <div className="flex items-center gap-1.5">
           <span className="w-3 h-3 rounded-sm bg-amber-500/30 border border-amber-400/40" />
-          <span className="text-gray-500 text-xs">Holidays</span>
+          <span className="text-xs" style={{ color: "var(--cal-subtext)" }}>Holidays</span>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="w-3 h-3 rounded-sm bg-blue-600/50 border border-blue-600/40" />
-          <span className="text-gray-500 text-xs">iCloud</span>
+          <span className="text-xs" style={{ color: "var(--cal-subtext)" }}>iCloud</span>
         </div>
         <div className="flex items-center gap-1.5">
           <span
@@ -143,13 +147,13 @@ export function CalendarGrid({ eventsByDate, photosByDate, onDayDoubleTap }: Cal
               borderColor: "color-mix(in srgb, var(--cal-event) 60%, transparent)",
             }}
           />
-          <span className="text-gray-500 text-xs">Local</span>
+          <span className="text-xs" style={{ color: "var(--cal-subtext)" }}>Local</span>
         </div>
         <div className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-amber-400/80" />
-          <span className="text-gray-500 text-xs">Photos</span>
+          <span className="text-xs" style={{ color: "var(--cal-subtext)" }}>Photos</span>
         </div>
-        <span className="text-gray-600 text-xs ml-auto">Double-tap a day to add events or photos</span>
+        <span className="text-xs ml-auto opacity-80" style={{ color: "var(--cal-subtext)" }}>Double-tap a day to add events or photos</span>
       </div>
     </div>
   );

@@ -1,5 +1,7 @@
 import { useRef } from "react";
 import { CalendarEvent, DatePhoto } from "../../types";
+import { useDecor } from "../../hooks/useTheme";
+import { JackOLantern, PUMPKIN_BODY_OFFSET } from "../theme/JackOLantern";
 
 interface DayCellProps {
   date: Date | null;
@@ -12,6 +14,7 @@ interface DayCellProps {
 
 export function DayCell({ date, isCurrentMonth, isToday, events, photos, onDoubleTap }: DayCellProps) {
   const lastTapRef = useRef<number>(0);
+  const spooky = useDecor() === "halloween";
 
   if (!date) {
     return <div className="bg-transparent border border-gray-800/20 rounded-xl" />;
@@ -42,7 +45,7 @@ export function DayCell({ date, isCurrentMonth, isToday, events, photos, onDoubl
     <div
       className={`relative border rounded-xl flex flex-col overflow-hidden cursor-pointer transition-all duration-150 select-none
         ${isToday
-          ? "border-blue-500/70"
+          ? spooky ? "border-[color:var(--cal-event)]" : "border-blue-500/70"
           : isCurrentMonth
           ? "border-gray-700/40 hover:border-gray-600/60"
           : "border-gray-800/20 opacity-40"
@@ -64,23 +67,44 @@ export function DayCell({ date, isCurrentMonth, isToday, events, photos, onDoubl
       {!hasPhoto && (
         <div
           className={`absolute inset-0 ${
-            isToday ? "bg-blue-950/30" : isCurrentMonth ? "bg-gray-800/20" : "bg-gray-900/10"
+            isToday
+              ? spooky ? "" : "bg-blue-950/30"
+              : isCurrentMonth ? "bg-gray-800/20" : "bg-gray-900/10"
           }`}
+          style={
+            isToday && spooky
+              ? { backgroundColor: "color-mix(in srgb, var(--cal-event) 12%, transparent)" }
+              : undefined
+          }
         />
       )}
 
       <div className="relative flex items-center justify-between px-2 pt-1.5 pb-0.5">
-        <span
-          className={`text-sm font-semibold w-7 h-7 flex items-center justify-center rounded-full
-            ${isToday ? "bg-blue-500 text-white" : hasPhoto ? "drop-shadow" : ""}
-            ${!isToday && !hasPhoto && !isCurrentMonth ? "opacity-40" : ""}
-          `}
-          // Today keeps its solid blue chip; every other day number follows the
-          // themed date color, dimmed when it belongs to an adjacent month.
-          style={isToday ? undefined : { color: hasPhoto ? "#ffffff" : "var(--cal-date)" }}
-        >
-          {date.getDate()}
-        </span>
+        {isToday && spooky ? (
+          // Today's marker becomes a jack-o'-lantern. The face is dropped at
+          // this size — the day number sits where it would be.
+          <span className="relative w-7 h-7 flex items-center justify-center">
+            <JackOLantern size={28} showFace={false} className="absolute inset-0" />
+            <span
+              className="relative text-xs font-bold text-black leading-none"
+              style={{ transform: `translateY(${28 * PUMPKIN_BODY_OFFSET}px)` }}
+            >
+              {date.getDate()}
+            </span>
+          </span>
+        ) : (
+          <span
+            className={`text-sm font-semibold w-7 h-7 flex items-center justify-center rounded-full
+              ${isToday ? "bg-blue-500 text-white" : hasPhoto ? "drop-shadow" : ""}
+              ${!isToday && !hasPhoto && !isCurrentMonth ? "opacity-40" : ""}
+            `}
+            // Today keeps its solid blue chip; every other day number follows the
+            // themed date color, dimmed when it belongs to an adjacent month.
+            style={isToday ? undefined : { color: hasPhoto ? "#ffffff" : "var(--cal-date)" }}
+          >
+            {date.getDate()}
+          </span>
+        )}
         <div className="flex items-center gap-1">
           {localEvents.length > 0 && (
             <span
@@ -133,7 +157,10 @@ export function DayCell({ date, isCurrentMonth, isToday, events, photos, onDoubl
           );
         })}
         {sortedEvents.length > 4 && (
-          <div className={`text-xs px-1.5 ${hasPhoto ? "text-white/60" : "text-gray-500"}`}>
+          <div
+            className="text-xs px-1.5"
+            style={{ color: hasPhoto ? "rgba(255,255,255,0.6)" : "var(--cal-subtext)" }}
+          >
             +{sortedEvents.length - 4} more
           </div>
         )}

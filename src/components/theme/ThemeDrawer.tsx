@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Check, Plus, RotateCcw, X } from "lucide-react";
-import { DEFAULT_THEME, THEME_TABS, Theme, ThemeKey } from "../../lib/theme";
+import { PRESETS, Preset, THEME_TABS, Theme, ThemeColorKey, presetById } from "../../lib/theme";
 import { isValidHex, normalizeHex } from "../../lib/color";
 import { useClock } from "../../hooks/useClock";
 import { ColorWheel } from "./ColorWheel";
@@ -43,8 +43,9 @@ interface ThemeDrawerProps {
   onClose: () => void;
   theme: Theme;
   swatches: string[];
-  onChange: (key: ThemeKey, hex: string) => void;
-  onReset: (key: ThemeKey) => void;
+  onChange: (key: ThemeColorKey, hex: string) => void;
+  onReset: (key: ThemeColorKey) => void;
+  onApplyPreset: (preset: Preset) => void;
   onSaveSwatch: (hex: string) => void;
   onRemoveSwatch: (hex: string) => void;
 }
@@ -56,15 +57,17 @@ export function ThemeDrawer({
   swatches,
   onChange,
   onReset,
+  onApplyPreset,
   onSaveSwatch,
   onRemoveSwatch,
 }: ThemeDrawerProps) {
-  const [activeTab, setActiveTab] = useState<ThemeKey>("background");
+  const [activeTab, setActiveTab] = useState<ThemeColorKey>("background");
   const [hexDraft, setHexDraft] = useState<string | null>(null);
 
   const active = THEME_TABS.find((t) => t.key === activeTab) ?? THEME_TABS[0];
-  const current = theme[activeTab];
-  const isDefault = current === DEFAULT_THEME[activeTab];
+  const current = theme.colors[activeTab];
+  const presetValue = presetById(theme.presetId).colors[activeTab];
+  const isDefault = current === presetValue;
   const alreadySaved = swatches.includes(current);
 
   function handleHexInput(raw: string) {
@@ -101,6 +104,35 @@ export function ThemeDrawer({
         </button>
       </div>
 
+      <div className="px-6 py-4 border-b border-white/10 flex flex-col gap-2">
+        <span className="text-white/50 text-[11px] uppercase tracking-wider">Presets</span>
+        <div className="flex gap-2 overflow-x-auto overscroll-x-contain touch-pan-x pb-1">
+          {PRESETS.map((preset) => {
+            const isActive = preset.id === theme.presetId;
+            return (
+              <button
+                key={preset.id}
+                onClick={() => onApplyPreset(preset)}
+                title={preset.provisional ? `${preset.label} — placeholder palette` : preset.label}
+                className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-medium
+                  transition-all active:scale-95
+                  ${isActive
+                    ? "border-white/70 bg-white/15 text-white"
+                    : "border-white/15 bg-white/5 text-white/65 hover:text-white hover:border-white/35"
+                  }
+                `}
+              >
+                <span aria-hidden="true">{preset.emoji}</span>
+                <span className="whitespace-nowrap">{preset.label}</span>
+                {preset.provisional && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400/70" title="Placeholder palette" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <div className="flex border-b border-white/10 overflow-x-auto overscroll-x-contain touch-pan-x">
         {THEME_TABS.map((tab) => (
           <button
@@ -119,7 +151,7 @@ export function ThemeDrawer({
             <span className="flex items-center gap-1.5">
               <span
                 className="w-2.5 h-2.5 rounded-full border border-white/30"
-                style={{ backgroundColor: theme[tab.key] }}
+                style={{ backgroundColor: theme.colors[tab.key] }}
               />
               {tab.label}
             </span>
@@ -217,7 +249,9 @@ export function ThemeDrawer({
             transition-all"
         >
           <RotateCcw size={15} />
-          {isDefault ? `${active.label} is default` : `Reset ${active.label} to default`}
+          {isDefault
+            ? `${active.label} matches ${presetById(theme.presetId).label}`
+            : `Reset ${active.label} to ${presetById(theme.presetId).label}`}
         </button>
       </div>
     </div>

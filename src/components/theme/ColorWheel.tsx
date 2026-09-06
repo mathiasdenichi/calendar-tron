@@ -23,8 +23,10 @@ export function ColorWheel({ value, onChange, size = DEFAULT_SIZE }: ColorWheelP
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
-  // Repaint the wheel whenever brightness changes — hue/saturation are the two
-  // spatial axes, value is the third and has to be baked into the pixels.
+  // Painted at full brightness and never repainted: baking `value` into the
+  // pixels turns the whole wheel black at v=0 (which a black background theme
+  // hits immediately) and it reads as broken. Brightness lives on the slider,
+  // and the marker still shows the true colour.
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
@@ -48,7 +50,7 @@ export function ColorWheel({ value, onChange, size = DEFAULT_SIZE }: ColorWheelP
         let angle = (Math.atan2(dy, dx) * 180) / Math.PI;
         if (angle < 0) angle += 360;
 
-        const { r, g, b } = hsvToRgbLocal(angle, Math.min(dist / radius, 1), hsv.v);
+        const { r, g, b } = hsvToRgbLocal(angle, Math.min(dist / radius, 1), 1);
         img.data[i] = r;
         img.data[i + 1] = g;
         img.data[i + 2] = b;
@@ -58,7 +60,7 @@ export function ColorWheel({ value, onChange, size = DEFAULT_SIZE }: ColorWheelP
     }
 
     ctx.putImageData(img, 0, 0);
-  }, [hsv.v, size]);
+  }, [size]);
 
   const pickFromPointer = useCallback(
     (clientX: number, clientY: number) => {
@@ -118,7 +120,8 @@ export function ColorWheel({ value, onChange, size = DEFAULT_SIZE }: ColorWheelP
           onPointerMove={handlePointerMove}
           // touch-none stops the drawer from panning while dragging the wheel.
           className="rounded-full cursor-crosshair touch-none block"
-          style={{ width: size, height: size }}
+          // A floor of 0.35 keeps the wheel readable even at zero brightness.
+          style={{ width: size, height: size, opacity: 0.35 + 0.65 * hsv.v }}
         />
         <div
           className="absolute w-5 h-5 rounded-full border-2 border-white shadow-lg pointer-events-none"

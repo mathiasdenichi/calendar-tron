@@ -1,30 +1,145 @@
 import { normalizeHex } from "./color";
 
-export type ThemeKey = "background" | "dateText" | "eventColor" | "timeColor";
+export type ThemeColorKey =
+  | "background"
+  | "titleText"
+  | "dateText"
+  | "subText"
+  | "eventColor"
+  | "timeColor";
 
-export type Theme = Record<ThemeKey, string>;
+/** Non-color decoration a preset can switch on (icon swaps, day markers). */
+export type DecorId = "none" | "halloween";
 
-/** Matches the hand-authored palette the app shipped with. */
-export const DEFAULT_THEME: Theme = {
+export interface Theme {
+  colors: Record<ThemeColorKey, string>;
+  decor: DecorId;
+  /** Which preset these values came from — drives per-tab "reset". */
+  presetId: string;
+}
+
+export const DEFAULT_COLORS: Record<ThemeColorKey, string> = {
   background: "#030712", // gray-950
+  titleText: "#ffffff",
   dateText: "#e5e7eb", // gray-200
+  subText: "#6b7280", // gray-500
   eventColor: "#10b981", // emerald-500
   timeColor: "#ffffff", // the clock shipped white
 };
 
-export const THEME_TABS: Array<{ key: ThemeKey; label: string; hint: string }> = [
+export const THEME_TABS: Array<{ key: ThemeColorKey; label: string; hint: string }> = [
   { key: "background", label: "Background", hint: "Calendar surface behind the month grid" },
+  { key: "titleText", label: "Title Text", hint: "Month heading and the day detail title" },
   { key: "dateText", label: "Date Text", hint: "Day numbers and weekday headers" },
+  { key: "subText", label: "Subtext", hint: "Legend, hints and the “+N more” line" },
   { key: "eventColor", label: "Event Color", hint: "Your own events (iCloud and holidays keep their colors)" },
   { key: "timeColor", label: "Time Color", hint: "The clock above the weather panel" },
 ];
 
-const CSS_VARS: Record<ThemeKey, string> = {
+const CSS_VARS: Record<ThemeColorKey, string> = {
   background: "--cal-bg",
+  titleText: "--cal-title",
   dateText: "--cal-date",
+  subText: "--cal-subtext",
   eventColor: "--cal-event",
   timeColor: "--cal-time",
 };
+
+export const COLOR_KEYS = Object.keys(CSS_VARS) as ThemeColorKey[];
+
+export interface Preset {
+  id: string;
+  label: string;
+  emoji: string;
+  colors: Record<ThemeColorKey, string>;
+  decor: DecorId;
+  /** Palette is a placeholder awaiting a spec. */
+  provisional?: boolean;
+}
+
+// Deep saffron — the CSS-named saffron orange, and legible on black.
+const SAFFRON = "#ff9933";
+
+export const PRESETS: Preset[] = [
+  {
+    id: "default",
+    label: "Default",
+    emoji: "🌙",
+    colors: DEFAULT_COLORS,
+    decor: "none",
+  },
+  {
+    id: "halloween",
+    label: "Halloween",
+    emoji: "🎃",
+    colors: {
+      background: "#000000",
+      titleText: SAFFRON,
+      dateText: "#ffffff",
+      subText: "#ffffff",
+      eventColor: SAFFRON,
+      timeColor: SAFFRON,
+    },
+    decor: "halloween",
+  },
+  {
+    id: "gingerbread",
+    label: "Gingey Holiday",
+    emoji: "🍪",
+    colors: {
+      background: "#2b1608",
+      titleText: "#f5c98a",
+      dateText: "#ffe9c9",
+      subText: "#d9a86c",
+      eventColor: "#e08b3e",
+      timeColor: "#f5c98a",
+    },
+    decor: "none",
+    provisional: true,
+  },
+  {
+    id: "thanksgiving",
+    label: "Thanksgiving",
+    emoji: "🦃",
+    colors: {
+      background: "#1a0f06",
+      titleText: "#e8863a",
+      dateText: "#f3e3cd",
+      subText: "#c08b57",
+      eventColor: "#b4462a",
+      timeColor: "#e8863a",
+    },
+    decor: "none",
+    provisional: true,
+  },
+  {
+    id: "christmas",
+    label: "Christmas",
+    emoji: "🎄",
+    colors: {
+      background: "#0a1f12",
+      titleText: "#e8342f",
+      dateText: "#f4f7f2",
+      subText: "#8fbf8f",
+      eventColor: "#1f8a44",
+      timeColor: "#f2d675",
+    },
+    decor: "none",
+    provisional: true,
+  },
+];
+
+export const DEFAULT_PRESET = PRESETS[0];
+
+export function presetById(id: string): Preset {
+  return PRESETS.find((p) => p.id === id) ?? DEFAULT_PRESET;
+}
+
+export function themeFromPreset(preset: Preset): Theme {
+  return { colors: { ...preset.colors }, decor: preset.decor, presetId: preset.id };
+}
+
+export const DEFAULT_THEME: Theme = themeFromPreset(DEFAULT_PRESET);
 
 const THEME_STORAGE_KEY = "calendar_theme";
 const SWATCH_STORAGE_KEY = "calendar_theme_swatches";
@@ -34,20 +149,25 @@ export const MAX_SWATCHES = 12;
 export function loadTheme(): Theme {
   try {
     const raw = localStorage.getItem(THEME_STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_THEME };
-    const parsed = JSON.parse(raw) as Partial<Theme>;
+    if (!raw) return themeFromPreset(DEFAULT_PRESET);
 
-    // Merge over defaults so a stored theme written before a key existed — or
-    // one with a corrupt value — still yields a complete, valid theme.
-    const theme = { ...DEFAULT_THEME };
-    for (const key of Object.keys(CSS_VARS) as ThemeKey[]) {
-      const candidate = parsed?.[key];
+    const parsed = JSON.parse(raw);
+    // Themes written before presets existed were a flat {key: hex} map.
+    const storedColors = parsed?.colors ?? parsed ?? {};
+
+    const colors = { ...DEFAULT_COLORS };
+    for (const key of COLOR_KEYS) {
+      const candidate = storedColors?.[key];
       const valid = typeof candidate === "string" ? normalizeHex(candidate) : null;
-      if (valid) theme[key] = valid;
+      if (valid) colors[key] = valid;
     }
-    return theme;
+
+    const decor: DecorId = parsed?.decor === "halloween" ? "halloween" : "none";
+    const presetId = typeof parsed?.presetId === "string" ? presetById(parsed.presetId).id : "default";
+
+    return { colors, decor, presetId };
   } catch {
-    return { ...DEFAULT_THEME };
+    return themeFromPreset(DEFAULT_PRESET);
   }
 }
 
@@ -83,14 +203,38 @@ export function saveSwatches(swatches: string[]): void {
   }
 }
 
+// --- decor broadcast -------------------------------------------------------
+// Decor swaps SVG artwork, which CSS variables cannot express, so components
+// subscribe to it directly rather than threading a prop through every layer.
+
+let currentDecor: DecorId = "none";
+const decorListeners = new Set<() => void>();
+
+export function getDecor(): DecorId {
+  return currentDecor;
+}
+
+export function subscribeDecor(listener: () => void): () => void {
+  decorListeners.add(listener);
+  return () => {
+    decorListeners.delete(listener);
+  };
+}
+
 /**
- * Pushes the theme onto the document as CSS custom properties. Components read
- * them via var(--cal-*), so a change repaints everything at once without any
- * prop drilling or re-render of the calendar tree.
+ * Pushes colors onto the document as CSS custom properties and broadcasts the
+ * decor. Components read colors via var(--cal-*), so a change repaints
+ * everything at once without re-rendering the calendar tree.
  */
 export function applyTheme(theme: Theme): void {
   const root = document.documentElement;
-  for (const key of Object.keys(CSS_VARS) as ThemeKey[]) {
-    root.style.setProperty(CSS_VARS[key], theme[key]);
+  for (const key of COLOR_KEYS) {
+    root.style.setProperty(CSS_VARS[key], theme.colors[key]);
+  }
+  root.dataset.decor = theme.decor;
+
+  if (theme.decor !== currentDecor) {
+    currentDecor = theme.decor;
+    decorListeners.forEach((listener) => listener());
   }
 }

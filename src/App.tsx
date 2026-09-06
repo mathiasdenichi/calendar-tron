@@ -8,7 +8,7 @@ import { useTheme } from "./hooks/useTheme";
 export default function App() {
   const [radarOpen, setRadarOpen] = useState(false);
   const [themeOpen, setThemeOpen] = useState(false);
-  const { theme, swatches, setColor, resetColor, saveSwatch, removeSwatch } = useTheme();
+  const { theme, swatches, setColor, resetColor, applyPreset, saveSwatch, removeSwatch } = useTheme();
 
   return (
     <div className="flex flex-col portrait:flex-col landscape:flex-row w-full h-full overflow-hidden bg-[var(--cal-bg)]">
@@ -26,6 +26,7 @@ export default function App() {
         swatches={swatches}
         onChange={setColor}
         onReset={resetColor}
+        onApplyPreset={applyPreset}
         onSaveSwatch={saveSwatch}
         onRemoveSwatch={removeSwatch}
       />

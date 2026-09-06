@@ -1,4 +1,6 @@
 import { WeatherCondition } from "../../lib/weatherCodes";
+import { useDecor } from "../../hooks/useTheme";
+import { JackOLanternShape } from "../theme/JackOLantern";
 
 interface WeatherIconProps {
   condition: WeatherCondition;
@@ -7,6 +9,11 @@ interface WeatherIconProps {
 }
 
 export function WeatherIcon({ condition, size = 80, className = "" }: WeatherIconProps) {
+  const decor = useDecor();
+  // Halloween swaps every sun for a jack-o'-lantern; the two sun-bearing
+  // conditions are "clear" and the sun peeking out of "partly-cloudy".
+  const spooky = decor === "halloween";
+
   return (
     <svg
       width={size}
@@ -16,8 +23,8 @@ export function WeatherIcon({ condition, size = 80, className = "" }: WeatherIco
       xmlns="http://www.w3.org/2000/svg"
       className={className}
     >
-      {condition === "clear" && <SunIcon />}
-      {condition === "partly-cloudy" && <PartlyCloudyIcon />}
+      {condition === "clear" && (spooky ? <PumpkinIcon /> : <SunIcon />)}
+      {condition === "partly-cloudy" && (spooky ? <PartlyPumpkinIcon /> : <PartlyCloudyIcon />)}
       {condition === "cloudy" && <CloudIcon />}
       {condition === "foggy" && <FogIcon />}
       {condition === "drizzle" && <DrizzleIcon />}
@@ -26,6 +33,43 @@ export function WeatherIcon({ condition, size = 80, className = "" }: WeatherIco
       {condition === "snow" && <SnowIcon />}
       {condition === "thunderstorm" && <ThunderstormIcon />}
     </svg>
+  );
+}
+
+function PumpkinIcon() {
+  return (
+    <g>
+      <style>{`
+        @keyframes pumpkin-glow { 0%,100% { opacity:1; } 50% { opacity:0.82; } }
+        .pumpkin-core { animation: pumpkin-glow 3s ease-in-out infinite; transform-origin: 40px 40px; }
+      `}</style>
+      {/* 64-unit pumpkin centred in this 80-unit viewBox */}
+      <g className="pumpkin-core" transform="translate(8 8)">
+        <JackOLanternShape />
+      </g>
+    </g>
+  );
+}
+
+function PartlyPumpkinIcon() {
+  return (
+    <g>
+      <style>{`
+        @keyframes sun-peek { 0%,100%{transform:translateX(0)} 50%{transform:translateX(-3px)} }
+        @keyframes cloud-drift { 0%,100%{transform:translateX(0)} 50%{transform:translateX(3px)} }
+        .pp-pumpkin { animation: sun-peek 4s ease-in-out infinite; }
+        .pp-cloud { animation: cloud-drift 4s ease-in-out infinite; }
+      `}</style>
+      <g className="pp-pumpkin" transform="translate(6 2) scale(0.72)">
+        <JackOLanternShape />
+      </g>
+      <g className="pp-cloud">
+        <ellipse cx="44" cy="48" rx="18" ry="12" fill="white" opacity="0.95" />
+        <circle cx="32" cy="48" r="10" fill="white" opacity="0.95" />
+        <circle cx="50" cy="44" r="12" fill="white" opacity="0.95" />
+        <rect x="24" y="48" width="38" height="12" fill="white" opacity="0.95" />
+      </g>
+    </g>
   );
 }
 
