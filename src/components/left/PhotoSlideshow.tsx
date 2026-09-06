@@ -7,19 +7,12 @@ const FALLBACK_URL =
 interface PhotoSlideshowProps {
   currentPhoto: SlideshowPhoto | null;
   loading: boolean;
-  syncing: boolean;
-  syncNow: () => void;
-  onSyncReady: (syncing: boolean, syncNow: () => void) => void;
 }
 
-export function PhotoSlideshow({ currentPhoto, loading, syncing, syncNow, onSyncReady }: PhotoSlideshowProps) {
+export function PhotoSlideshow({ currentPhoto, loading }: PhotoSlideshowProps) {
   const [displayUrl, setDisplayUrl] = useState<string | null>(null);
   const [nextUrl, setNextUrl] = useState<string | null>(null);
   const [transitioning, setTransitioning] = useState(false);
-
-  useEffect(() => {
-    onSyncReady(syncing, syncNow);
-  }, [syncing, syncNow, onSyncReady]);
 
   const targetUrl = currentPhoto?.url || (!loading ? FALLBACK_URL : null);
 

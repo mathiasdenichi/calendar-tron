@@ -32,7 +32,7 @@ export function RightPanel() {
   const selectedPhotos: DatePhoto[] = selectedDate ? photosByDate[getDateStr(selectedDate)] || [] : [];
 
   return (
-    <div className="w-full h-full bg-gray-950 flex flex-col p-6 overflow-hidden">
+    <div className="w-full h-full bg-[var(--cal-bg)] flex flex-col p-6 overflow-hidden">
       {loading ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="text-gray-500 text-lg">Loading calendar...</div>

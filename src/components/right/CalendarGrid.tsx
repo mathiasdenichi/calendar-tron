@@ -90,7 +90,11 @@ export function CalendarGrid({ eventsByDate, photosByDate, onDayDoubleTap }: Cal
 
       <div className="grid grid-cols-7 gap-1 mb-1">
         {DOW_LABELS.map((d) => (
-          <div key={d} className="text-center text-xs font-semibold text-gray-500 uppercase tracking-widest py-1">
+          <div
+            key={d}
+            className="text-center text-xs font-semibold uppercase tracking-widest py-1 opacity-60"
+            style={{ color: "var(--cal-date)" }}
+          >
             {d}
           </div>
         ))}
@@ -132,7 +136,13 @@ export function CalendarGrid({ eventsByDate, photosByDate, onDayDoubleTap }: Cal
           <span className="text-gray-500 text-xs">iCloud</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="w-3 h-3 rounded-sm bg-emerald-600/50 border border-emerald-600/40" />
+          <span
+            className="w-3 h-3 rounded-sm border"
+            style={{
+              backgroundColor: "color-mix(in srgb, var(--cal-event) 50%, transparent)",
+              borderColor: "color-mix(in srgb, var(--cal-event) 60%, transparent)",
+            }}
+          />
           <span className="text-gray-500 text-xs">Local</span>
         </div>
         <div className="flex items-center gap-1.5">

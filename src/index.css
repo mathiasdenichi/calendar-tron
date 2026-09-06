@@ -11,7 +11,9 @@ html, body, #root {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #030712;
+  /* Fallback matches DEFAULT_THEME.background so the very first paint, before
+     the theme vars are applied, is already the right color. */
+  background: var(--cal-bg, #030712);
 }
 
 .transition-opacity {

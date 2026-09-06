@@ -72,21 +72,21 @@ export function DayCell({ date, isCurrentMonth, isToday, events, photos, onDoubl
       <div className="relative flex items-center justify-between px-2 pt-1.5 pb-0.5">
         <span
           className={`text-sm font-semibold w-7 h-7 flex items-center justify-center rounded-full
-            ${isToday
-              ? "bg-blue-500 text-white"
-              : hasPhoto
-              ? "text-white drop-shadow"
-              : isCurrentMonth
-              ? "text-gray-200"
-              : "text-gray-600"
-            }
+            ${isToday ? "bg-blue-500 text-white" : hasPhoto ? "drop-shadow" : ""}
+            ${!isToday && !hasPhoto && !isCurrentMonth ? "opacity-40" : ""}
           `}
+          // Today keeps its solid blue chip; every other day number follows the
+          // themed date color, dimmed when it belongs to an adjacent month.
+          style={isToday ? undefined : { color: hasPhoto ? "#ffffff" : "var(--cal-date)" }}
         >
           {date.getDate()}
         </span>
         <div className="flex items-center gap-1">
           {localEvents.length > 0 && (
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/80" />
+            <span
+              className="w-1.5 h-1.5 rounded-full"
+              style={{ backgroundColor: "color-mix(in srgb, var(--cal-event) 80%, transparent)" }}
+            />
           )}
         </div>
       </div>
@@ -108,15 +108,25 @@ export function DayCell({ date, isCurrentMonth, isToday, events, photos, onDoubl
               </div>
             );
           }
+          const isICloud = event.source === "icloud";
           return (
             <div
               key={event.id}
-              className={`text-xs px-1.5 py-0.5 rounded truncate font-medium leading-tight
-                ${event.source === "icloud"
-                  ? "bg-blue-600/40 text-blue-100 border border-blue-500/30"
-                  : "bg-emerald-600/40 text-emerald-100 border border-emerald-500/30"
-                }
+              className={`text-xs px-1.5 py-0.5 rounded truncate font-medium leading-tight border
+                ${isICloud ? "bg-blue-600/40 text-blue-100 border-blue-500/30" : ""}
               `}
+              // Local events are the ones the user owns, so they follow the
+              // themed event color. iCloud and holidays keep fixed colors so
+              // the legend below the grid still tells them apart.
+              style={
+                isICloud
+                  ? undefined
+                  : {
+                      backgroundColor: "color-mix(in srgb, var(--cal-event) 40%, transparent)",
+                      borderColor: "color-mix(in srgb, var(--cal-event) 55%, transparent)",
+                      color: "color-mix(in srgb, var(--cal-event) 30%, white)",
+                    }
+              }
             >
               <span className="block truncate">{formatTime(event.startTime)} {event.title}</span>
             </div>
