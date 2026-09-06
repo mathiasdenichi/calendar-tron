@@ -254,6 +254,14 @@ function Stop-Kiosk {
 
 function Start-Kiosk {
     Stop-Kiosk
+
+    # A half-finished npm ci can remove electron.exe. Restore it rather than
+    # retrying a launch that cannot possibly succeed.
+    if (-not (Test-Path -LiteralPath $ElectronExe)) {
+        Write-Log '  electron.exe missing - repairing node_modules'
+        Invoke-Step 'npm install' 'npm.cmd' @('install')
+    }
+
     Write-Log '  starting kiosk'
     $script:Kiosk = Start-Process -FilePath $ElectronExe -ArgumentList '.' `
                                   -WorkingDirectory $RepoRoot -PassThru
@@ -269,7 +277,17 @@ function Invoke-Deploy {
 
     $lockAfter = Get-GitOutput @('rev-parse', 'HEAD:package-lock.json')
     if ($lockBefore -ne $lockAfter) {
-        Invoke-Step 'npm ci' 'npm.cmd' @('ci')
+        # npm ci deletes node_modules before installing, so a failure here leaves
+        # the tree empty - no vite to build with and no electron.exe to launch.
+        # npm install repairs in place rather than leaving the kiosk stranded.
+        try {
+            Invoke-Step 'npm ci' 'npm.cmd' @('ci')
+        }
+        catch {
+            Write-Log "  npm ci failed: $_"
+            Write-Log '  falling back to npm install to repair node_modules'
+            Invoke-Step 'npm install' 'npm.cmd' @('install')
+        }
     }
 
     Invoke-Step 'npm run build' 'npm.cmd' @('run', 'build')
