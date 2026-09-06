@@ -35,7 +35,18 @@ export interface WeatherData {
     windSpeed: number;
     humidity?: number;
   };
+  hourly: HourlyForecast[];
   daily: DailyForecast[];
+}
+
+export interface HourlyForecast {
+  /** Local-time key from the API, e.g. "2026-09-06T15:00". */
+  time: string;
+  /** "Now", then "3PM", "4PM", ... */
+  hourLabel: string;
+  temp: number;
+  humidity: number;
+  weatherCode: number;
 }
 
 export interface DailyForecast {

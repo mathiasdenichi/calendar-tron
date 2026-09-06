@@ -28,17 +28,40 @@ export const TILE_Y: number = latLonToTile(LAT, LON, ZOOM).y;
 export const DOT_X: number = tileToPixel(LAT, LON, ZOOM, TILE_X, TILE_Y).px;
 export const DOT_Y: number = tileToPixel(LAT, LON, ZOOM, TILE_X, TILE_Y).py;
 
-const imageCache = new Map<string, HTMLImageElement>();
+// Basemap tiles never change, and the set is tiny (one screenful), so these are
+// kept for the life of the process.
+const osmCache = new Map<string, HTMLImageElement>();
 
-function loadImage(src: string): Promise<HTMLImageElement> {
-  if (imageCache.has(src)) return Promise.resolve(imageCache.get(src)!);
+// Radar tiles are grouped by frame path so an expired frame's tiles can be
+// dropped in one go. Without this the cache grows by a full frame's worth of
+// 256x256 PNGs every refresh and never stops — the kiosk runs for weeks.
+const radarCache = new Map<string, Map<string, HTMLImageElement>>();
+
+function loadInto(cache: Map<string, HTMLImageElement>, src: string): Promise<HTMLImageElement> {
+  const hit = cache.get(src);
+  if (hit) return Promise.resolve(hit);
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = "anonymous";
-    img.onload = () => { imageCache.set(src, img); resolve(img); };
+    img.onload = () => { cache.set(src, img); resolve(img); };
     img.onerror = reject;
     img.src = src;
   });
+}
+
+function radarTilesFor(framePath: string): Map<string, HTMLImageElement> {
+  let tiles = radarCache.get(framePath);
+  if (!tiles) {
+    tiles = new Map();
+    radarCache.set(framePath, tiles);
+  }
+  return tiles;
+}
+
+function pruneRadarCache(keepPaths: Set<string>): void {
+  for (const framePath of radarCache.keys()) {
+    if (!keepPaths.has(framePath)) radarCache.delete(framePath);
+  }
 }
 
 export async function drawRadarFrame(
@@ -70,14 +93,16 @@ export async function drawRadarFrame(
     }
   }
 
+  const frameTiles = radarTilesFor(frame.path);
+
   // Load all images fully before touching the canvas — prevents blank flash
   const loaded = await Promise.all(
     tiles.map(async ({ tx, ty, dx, dy }) => {
       const osmUrl = `https://tile.openstreetmap.org/${ZOOM}/${tx}/${ty}.png`;
       const radarUrl = `https://tilecache.rainviewer.com${frame.path}/256/${ZOOM}/${tx}/${ty}/${colorScheme}/1_1.png`;
       const [osmImg, radarImg] = await Promise.all([
-        loadImage(osmUrl).catch(() => null),
-        loadImage(radarUrl).catch(() => null),
+        loadInto(osmCache, osmUrl).catch(() => null),
+        loadInto(frameTiles, radarUrl).catch(() => null),
       ]);
       return { dx, dy, osmImg, radarImg };
     })
@@ -112,39 +137,72 @@ export async function drawRadarFrame(
   ctx.drawImage(offscreen, 0, 0);
 }
 
+const FRAME_COUNT = 8;
+const REFRESH_MS = 5 * 60 * 1000;
+const FRAMES_URL = "https://api.rainviewer.com/public/weather-maps.json";
+
 class RadarService {
   frames: RadarFrame[] = [];
   frameIndex = 0;
   loaded = false;
-  private intervalId: ReturnType<typeof setInterval> | null = null;
+  private timeoutId: ReturnType<typeof setTimeout> | null = null;
   private subscribers = new Set<(frames: RadarFrame[], index: number) => void>();
-  private fetchStarted = false;
+  private started = false;
 
   init() {
-    if (this.fetchStarted) return;
-    this.fetchStarted = true;
+    if (this.started) return;
+    this.started = true;
 
-    fetch("https://api.rainviewer.com/public/weather-maps.json")
-      .then((r) => r.json())
-      .then((data) => {
-        const past: RadarFrame[] = data.radar?.past || [];
-        this.frames = past.slice(-8);
-        this.frameIndex = this.frames.length - 1;
+    this.refresh();
+    // RainViewer publishes a new frame every ~10 minutes. Fetching the manifest
+    // only once left the kiosk animating the same stale frames until the app was
+    // restarted, which is the whole reason this needed a manual reload.
+    // Not stored: init() is guarded by `started`, and this singleton lives for
+    // the lifetime of the process, so there is nothing to cancel it from.
+    setInterval(() => this.refresh(), REFRESH_MS);
+  }
+
+  private async refresh() {
+    try {
+      const res = await fetch(FRAMES_URL, { cache: "no-store" });
+      const data = await res.json();
+      const past: RadarFrame[] = data.radar?.past || [];
+      const next = past.slice(-FRAME_COUNT);
+
+      if (next.length === 0) {
         this.loaded = true;
         this.notify();
-        this.startLoop();
-      })
-      .catch(() => { this.loaded = true; });
+        return;
+      }
+
+      // Nothing new published since the last check — leave the animation alone
+      // rather than restarting it every five minutes.
+      const newest = next[next.length - 1].time;
+      if (this.loaded && newest === this.frames[this.frames.length - 1]?.time) return;
+
+      pruneRadarCache(new Set(next.map((f) => f.path)));
+
+      this.frames = next;
+      this.frameIndex = next.length - 1;
+      this.loaded = true;
+      this.notify();
+      this.startLoop();
+    } catch {
+      // Transient network blip — keep showing the frames we have and retry on
+      // the next interval.
+      this.loaded = true;
+      this.notify();
+    }
   }
 
   private startLoop() {
-    if (this.intervalId) clearInterval(this.intervalId);
+    if (this.timeoutId) clearTimeout(this.timeoutId);
     if (this.frames.length < 2) return;
 
     const schedule = () => {
       const isLast = this.frameIndex === this.frames.length - 1;
       // Hold the last frame 2s, all others 700ms
-      this.intervalId = setTimeout(() => {
+      this.timeoutId = setTimeout(() => {
         this.frameIndex = (this.frameIndex + 1) % this.frames.length;
         this.notify();
         schedule();
@@ -155,7 +213,7 @@ class RadarService {
   }
 
   stopLoop() {
-    if (this.intervalId) { clearTimeout(this.intervalId); this.intervalId = null; }
+    if (this.timeoutId) { clearTimeout(this.timeoutId); this.timeoutId = null; }
   }
 
   private notify() {

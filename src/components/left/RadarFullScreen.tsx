@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronLeft } from "lucide-react";
-import { radarService, drawRadarFrame, RadarFrame, DOT_X, DOT_Y } from "../../lib/radarService";
+import { radarService, drawRadarFrame, RadarFrame } from "../../lib/radarService";
 
 interface RadarFullScreenProps {
   onClose: () => void;
@@ -11,10 +11,8 @@ const ROWS = 5;
 const TILE_SIZE = 256;
 const CANVAS_W = TILE_SIZE * COLS;
 const CANVAS_H = TILE_SIZE * ROWS;
-const CENTER_OFF_X = Math.floor(COLS / 2);
-const CENTER_OFF_Y = Math.floor(ROWS / 2);
-const MARKER_X = DOT_X + CENTER_OFF_X * TILE_SIZE;
-const MARKER_Y = DOT_Y + CENTER_OFF_Y * TILE_SIZE;
+// The location marker is drawn by drawRadarFrame itself; these were left over
+// from when this component painted it.
 
 export function RadarFullScreen({ onClose }: RadarFullScreenProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);

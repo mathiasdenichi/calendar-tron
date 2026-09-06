@@ -49,7 +49,9 @@ export function RadarBox({ onClick, width, height }: RadarBoxProps) {
       }
     });
 
-    return unsubscribe;
+    // Wrapped because Set.delete returns a boolean, which is not a valid
+    // effect destructor.
+    return () => { unsubscribe(); };
   }, [width, height]);
 
   return (

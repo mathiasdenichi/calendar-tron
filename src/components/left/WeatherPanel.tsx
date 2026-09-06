@@ -4,6 +4,7 @@ import { getWeatherCondition, getWeatherDescription } from "../../lib/weatherCod
 import { WeatherIcon } from "./WeatherIcon";
 import { RadarBox } from "./RadarBox";
 import { CurrentWeather } from "./CurrentWeather";
+import { HourlyStrip } from "./HourlyStrip";
 
 interface WeatherPanelProps {
   onOpenRadar: () => void;
@@ -48,6 +49,7 @@ export function WeatherPanel({ onOpenRadar }: WeatherPanelProps) {
             todayHighLow={todayForecast ? { maxTemp: todayForecast.maxTemp, minTemp: todayForecast.minTemp } : undefined}
             windSpeed={weather.current.windSpeed}
           />
+          <HourlyStrip hours={weather.hourly} />
           <div className="flex gap-2">
             {forecastDays.map((day) => {
               const dc = getWeatherCondition(day.weatherCode);
