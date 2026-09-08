@@ -80,9 +80,10 @@ export function ThemeDrawer({
 
   return (
     <div
-      // Occupies exactly the left panel's width so the calendar stays visible
-      // and repaints live as colors change.
-      className={`fixed inset-y-0 left-0 z-40 w-1/3 bg-gray-950/95 backdrop-blur-xl
+      // Full width on a phone, a fixed panel in landscape, and exactly the
+      // kiosk's left third on a large display - where it covers the photo panel
+      // and leaves the calendar visible, repainting live as colors change.
+      className={`fixed inset-y-0 left-0 z-40 w-full sm:w-96 lg:w-1/3 bg-gray-950/95 backdrop-blur-xl
         border-r border-white/10 shadow-2xl flex flex-col
         transition-transform duration-300 ease-out
         ${open ? "translate-x-0" : "-translate-x-full pointer-events-none"}

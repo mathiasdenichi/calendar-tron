@@ -20,8 +20,8 @@ export function LeftPanel({ onOpenRadar, onOpenTheme }: LeftPanelProps) {
     <div className="relative w-full h-full overflow-hidden">
       <PhotoSlideshow currentPhoto={currentPhoto} loading={loading} />
 
-      <div className="relative z-10 h-full flex flex-col p-8">
-        <div className="pt-2 flex items-start justify-between">
+      <div className="relative z-10 h-full flex flex-col p-3 lg:p-8">
+        <div className="pt-0 lg:pt-2 flex items-start justify-between flex-shrink-0">
           <Clock />
           <HamburgerMenu
             syncing={syncing}
@@ -33,7 +33,7 @@ export function LeftPanel({ onOpenRadar, onOpenTheme }: LeftPanelProps) {
 
         <div className="flex-1" />
 
-        <div className="pb-2 flex flex-col gap-3">
+        <div className="pb-1 lg:pb-2 flex flex-col gap-1.5 lg:gap-3 min-h-0">
           <WeatherPanel onOpenRadar={onOpenRadar} />
           {photos.length > 1 && (
             <PhotoProgressBar currentIndex={currentIndex} paused={loading} />

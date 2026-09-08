@@ -7,11 +7,14 @@ interface CalendarGridProps {
   eventsByDate: Record<string, CalendarEvent[]>;
   photosByDate: Record<string, DatePhoto[]>;
   onDayDoubleTap: (date: Date) => void;
+  /** Rendered beside the month controls. Used when there is no left panel to
+      hold the menu, so it cannot overlap the next-month chevron. */
+  headerAccessory?: React.ReactNode;
 }
 
 const DOW_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-export function CalendarGrid({ eventsByDate, photosByDate, onDayDoubleTap }: CalendarGridProps) {
+export function CalendarGrid({ eventsByDate, photosByDate, onDayDoubleTap, headerAccessory }: CalendarGridProps) {
   const [viewDate, setViewDate] = useState(new Date());
 
   const year = viewDate.getFullYear();
@@ -84,12 +87,15 @@ export function CalendarGrid({ eventsByDate, photosByDate, onDayDoubleTap }: Cal
           </button>
         </div>
 
-        <button
-          onClick={nextMonth}
-          className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-gray-700/50 transition-colors"
-        >
-          <ChevronRight size={22} />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={nextMonth}
+            className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-gray-700/50 transition-colors"
+          >
+            <ChevronRight size={22} />
+          </button>
+          {headerAccessory}
+        </div>
       </div>
 
       <div className="grid grid-cols-7 gap-1 mb-1">

@@ -4,7 +4,7 @@ import { EventModal } from "./EventModal";
 import { useCalendar } from "../../hooks/useCalendar";
 import { CalendarEvent, DatePhoto } from "../../types";
 
-export function RightPanel() {
+export function RightPanel({ headerAccessory }: { headerAccessory?: React.ReactNode }) {
   const {
     eventsByDate,
     photosByDate,
@@ -32,7 +32,7 @@ export function RightPanel() {
   const selectedPhotos: DatePhoto[] = selectedDate ? photosByDate[getDateStr(selectedDate)] || [] : [];
 
   return (
-    <div className="w-full h-full bg-[var(--cal-bg)] flex flex-col p-6 overflow-hidden">
+    <div className="w-full h-full bg-[var(--cal-bg)] flex flex-col p-2 overflow-hidden">
       {loading ? (
         <div className="flex-1 flex items-center justify-center">
           <div className="text-gray-500 text-lg">Loading calendar...</div>
@@ -42,6 +42,7 @@ export function RightPanel() {
           eventsByDate={eventsByDate}
           photosByDate={photosByDate}
           onDayDoubleTap={handleDayDoubleTap}
+          headerAccessory={headerAccessory}
         />
       )}
 

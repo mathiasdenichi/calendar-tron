@@ -86,6 +86,44 @@ async function runPool<T>(items: T[], limit: number, worker: (item: T) => Promis
 
 const VIDEO_EXTS = /\.(mp4|mov|m4v|avi|mkv|webm|3gp|hevc|heic\.mp4)(\?|$)/i;
 
+/**
+ * Photo list for devices that do not cache: phones.
+ *
+ * Both url and thumbUrl point at the small derivative (~257x342, ~74 KB) rather
+ * than the full one (~666 KB), and nothing is written to localStorage or
+ * IndexedDB - a phone should neither fill its storage nor pull the full-
+ * resolution library over cellular.
+ */
+async function loadRemoteThumbnails(): Promise<SlideshowPhoto[]> {
+  try {
+    const token = import.meta.env.VITE_ICLOUD_PHOTOS_TOKEN as string | undefined;
+    const { data } = await axios.post(
+      `${SUPABASE_URL}/functions/v1/icloud-photos`,
+      token ? { token } : {},
+      {
+        headers: {
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (!Array.isArray(data?.photos)) return [];
+
+    const incoming: Array<{ guid: string; url: string; thumbUrl: string; width: number; height: number }> =
+      data.photos;
+
+    return incoming
+      .filter((p) => !VIDEO_EXTS.test(p.url))
+      .map((p) => {
+        const small = p.thumbUrl || p.url;
+        return { guid: p.guid, url: small, thumbUrl: small, width: p.width, height: p.height };
+      });
+  } catch {
+    return [];
+  }
+}
+
 const HISTORY_SIZE = 7;
 
 export function useICloudPhotos() {
@@ -218,6 +256,9 @@ export function useICloudPhotos() {
   useEffect(() => {
     async function init() {
       if (!isKiosk()) {
+        // Stream thumbnails instead of caching. See loadRemoteThumbnails.
+        const remote = await loadRemoteThumbnails();
+        if (remote.length > 0) setPhotos(shuffle(remote));
         setLoading(false);
         return;
       }
