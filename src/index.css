@@ -16,6 +16,18 @@ html, body, #root {
   background: var(--cal-bg, #030712);
 }
 
+/* index.html declares viewport-fit=cover so the background reaches the screen
+   edges, which also means content paints under the notch and home indicator.
+   Inset it back. env() resolves to 0 everywhere except a notched phone, so this
+   costs the kiosk nothing. */
+#root {
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top);
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+}
+
 .transition-opacity {
   transition-property: opacity;
   transition-timing-function: ease-in-out;

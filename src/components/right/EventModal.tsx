@@ -259,7 +259,7 @@ export function EventModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-gray-900 border border-gray-700 rounded-2xl w-[80vw] max-w-5xl h-[80vh] flex flex-col shadow-2xl overflow-hidden">
+      <div className="relative bg-gray-900 border border-gray-700 rounded-2xl w-[94vw] h-[90vh] sm:w-[80vw] sm:h-[80vh] max-w-5xl flex flex-col shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700/50">
           <div>
             <h2 className="text-white font-semibold text-lg">{displayDate}</h2>
@@ -267,7 +267,12 @@ export function EventModal({
               {events.length} event{events.length !== 1 ? "s" : ""} · {photos.length} photo{photos.length !== 1 ? "s" : ""}
             </p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors p-2 rounded-lg hover:bg-white/10">
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="min-w-[44px] min-h-[44px] flex items-center justify-center flex-shrink-0
+              text-gray-400 hover:text-white active:scale-95 transition-all rounded-xl hover:bg-white/10"
+          >
             <X size={20} />
           </button>
         </div>
@@ -643,17 +648,27 @@ export function EventModal({
           )}
         </div>
 
-        {activeTab === "events" && !showAddForm && (
-          <div className="px-6 pb-5 pt-2 border-t border-gray-700/50">
+        {/* Always-present footer. The header X is easy to miss on a phone, and
+            a bottom bar is where a thumb already is. */}
+        <div className="px-4 sm:px-6 pb-4 pt-3 border-t border-gray-700/50 flex gap-3 flex-shrink-0">
+          {activeTab === "events" && !showAddForm && (
             <button
               onClick={() => setShowAddForm(true)}
-              className="w-full flex items-center justify-center gap-2 py-2.5 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-xl transition-colors"
+              className="flex-1 min-h-[52px] flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white text-sm font-medium rounded-xl transition-all"
             >
               <Plus size={16} />
               Add Event
             </button>
-          </div>
-        )}
+          )}
+          <button
+            onClick={onClose}
+            className="flex-1 min-h-[52px] flex items-center justify-center gap-2 rounded-xl border border-gray-600
+              text-gray-300 hover:text-white hover:bg-white/10 active:scale-[0.98] text-sm font-medium transition-all"
+          >
+            <X size={16} />
+            Close
+          </button>
+        </div>
       </div>
     </div>
   );

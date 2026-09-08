@@ -157,10 +157,11 @@ export function RadarFullScreen({ onClose }: RadarFullScreenProps) {
       <div className="h-16 bg-gray-950 border-t border-white/10 flex items-center px-8">
         <button
           onClick={onClose}
-          className="flex items-center gap-2 text-white/70 hover:text-white transition-colors group"
+          aria-label="Back to Calendar"
+          className="flex items-center gap-2 min-h-[52px] pr-4 text-white/70 hover:text-white active:scale-95 transition-all group"
         >
-          <div className="w-9 h-9 rounded-full bg-white/10 group-hover:bg-white/20 flex items-center justify-center transition-colors">
-            <ChevronLeft size={20} />
+          <div className="w-11 h-11 rounded-full bg-white/10 group-hover:bg-white/20 flex items-center justify-center transition-colors">
+            <ChevronLeft size={22} />
           </div>
           <span className="text-sm font-medium">Back to Calendar</span>
         </button>

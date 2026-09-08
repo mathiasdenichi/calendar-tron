@@ -112,7 +112,7 @@ export function CalendarGrid({ eventsByDate, photosByDate, onDayDoubleTap, heade
 
       <div className="flex-1 flex flex-col gap-1">
         {weeks.map((week, wi) => (
-          <div key={wi} className="flex-1 grid grid-cols-7 gap-1">
+          <div key={wi} className="flex-1 max-h-[88px] lg:max-h-none grid grid-cols-7 gap-1">
             {week.map((date, di) => {
               if (!date) return <div key={di} />;
               const ds = toDateStr(date);
