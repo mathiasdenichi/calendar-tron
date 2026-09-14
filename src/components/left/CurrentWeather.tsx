@@ -21,15 +21,6 @@ export function CurrentWeather({ temperature, condition, description, todayHighL
             {temperature}°
           </span>
           <span className="text-white/70 text-sm lg:text-xl mb-0.5 lg:mb-2">F</span>
-
-          {/* Kiosk only. Below lg the panel is a phone in landscape at ~310px,
-              where this collides with the wrapped H/L line - and there is no
-              "big temperature" to sit beside there anyway. */}
-          {uvIndex !== undefined && (
-            <div className="hidden lg:block ml-4">
-              <UvGauge index={uvIndex} />
-            </div>
-          )}
         </div>
         <div className="text-white/70 text-xs lg:text-base font-light">{description}</div>
         {todayHighLow && (
@@ -39,6 +30,17 @@ export function CurrentWeather({ temperature, condition, description, todayHighL
         )}
       </div>
 
+      {/* Third item in the row - icon, temperature cluster, UV - bottom aligned
+          with the cluster rather than floating up beside the number.
+
+          Kiosk only: below lg the panel is a phone in landscape at ~310px, where
+          this collides with the wrapped H/L line, and there is no "big
+          temperature" to sit beside there anyway. */}
+      {uvIndex !== undefined && (
+        <div className="hidden lg:block ml-auto pl-3 flex-shrink-0">
+          <UvGauge index={uvIndex} />
+        </div>
+      )}
     </div>
   );
 }
