@@ -58,6 +58,7 @@ function sliceHourly(data: {
     temperature_2m?: number[];
     relativehumidity_2m?: number[];
     weathercode?: number[];
+    uv_index?: number[];
   };
 }): HourlyForecast[] {
   const times = data.hourly?.time ?? [];
@@ -79,6 +80,7 @@ function sliceHourly(data: {
     temp: Math.round(data.hourly?.temperature_2m?.[start + i] ?? 0),
     humidity: Math.round(data.hourly?.relativehumidity_2m?.[start + i] ?? 0),
     weatherCode: data.hourly?.weathercode?.[start + i] ?? 0,
+    uvIndex: data.hourly?.uv_index?.[start + i] ?? 0,
   }));
 }
 
@@ -92,7 +94,7 @@ export function useWeather() {
       const url =
         `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}` +
         `&current_weather=true` +
-        `&hourly=temperature_2m,relativehumidity_2m,weathercode` +
+        `&hourly=temperature_2m,relativehumidity_2m,weathercode,uv_index` +
         `&daily=temperature_2m_max,temperature_2m_min,weathercode` +
         `&temperature_unit=fahrenheit&windspeed_unit=mph` +
         `&timezone=${encodeURIComponent(TZ)}&forecast_days=${FORECAST_DAYS}`;
@@ -117,6 +119,7 @@ export function useWeather() {
           weatherCode: data.current_weather.weathercode,
           windSpeed: Math.round(data.current_weather.windspeed),
           humidity: hourly[0]?.humidity,
+          uvIndex: hourly[0]?.uvIndex,
         },
         hourly,
         daily,

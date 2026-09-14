@@ -52,6 +52,7 @@ export function WeatherPanel({ onOpenRadar }: WeatherPanelProps) {
             description={description}
             todayHighLow={todayForecast ? { maxTemp: todayForecast.maxTemp, minTemp: todayForecast.minTemp } : undefined}
             windSpeed={weather.current.windSpeed}
+            uvIndex={weather.current.uvIndex}
           />
           <HourlyStrip hours={weather.hourly} />
           <div className="w-full min-w-0 overflow-x-auto overscroll-x-contain touch-pan-x">

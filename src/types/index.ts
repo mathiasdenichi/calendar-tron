@@ -34,6 +34,7 @@ export interface WeatherData {
     weatherCode: number;
     windSpeed: number;
     humidity?: number;
+    uvIndex?: number;
   };
   hourly: HourlyForecast[];
   daily: DailyForecast[];
@@ -47,6 +48,7 @@ export interface HourlyForecast {
   temp: number;
   humidity: number;
   weatherCode: number;
+  uvIndex: number;
 }
 
 export interface DailyForecast {
