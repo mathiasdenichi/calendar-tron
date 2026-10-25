@@ -50,6 +50,7 @@ export async function fetchKioskInfo(): Promise<KioskInfo> {
 }
 
 export interface KioskShell {
+  minimize: () => Promise<void>;
   restart: () => Promise<void>;
   close: () => Promise<void>;
 }

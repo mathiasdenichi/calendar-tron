@@ -6,6 +6,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('kioskShell', {
+  minimize: () => ipcRenderer.invoke('kiosk:minimize'),
   restart: () => ipcRenderer.invoke('kiosk:restart'),
   close: () => ipcRenderer.invoke('kiosk:close'),
 });

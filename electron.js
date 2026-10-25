@@ -102,6 +102,20 @@ app.whenReady().then(async () => {
     app.quit();
   });
 
+  // Menu > Minimize, for reaching the desktop over remote access, where the
+  // taskbar is hidden behind the fullscreen window. A kiosk-mode window
+  // won't minimize, so drop out of kiosk mode first and go back into it as soon
+  // as the window is restored. The process stays up, so the supervisor leaves
+  // it alone.
+  ipcMain.handle('kiosk:minimize', () => {
+    if (!win) return;
+    if (win.isKiosk()) {
+      win.setKiosk(false);
+      win.once('restore', () => win.setKiosk(true));
+    }
+    win.minimize();
+  });
+
   // Menu > Restart. Unsupervised there is nobody to bring us back, so relaunch
   // ourselves; supervised, relaunching too would race the supervisor for the port.
   ipcMain.handle('kiosk:restart', () => {

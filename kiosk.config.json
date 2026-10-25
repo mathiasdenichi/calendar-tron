@@ -1,5 +1,6 @@
 {
-  "_comment": "publicUrl is the address phones use to reach this kiosk - normally the Tailscale MagicDNS name. Set it here and it is used by both the in-app menu and the supervisor's log banner; leave it empty to auto-detect via the tailscale CLI. manageTailscaleServe lets the supervisor run 'tailscale serve' itself at startup so remote access survives reboots. Edit this file in the repo and push: the kiosk does git reset --hard on deploy, so edits made directly on the DreamQuest are discarded.",
+  "_comment": "publicUrl is the address phones use to reach this kiosk - normally the Tailscale MagicDNS name. Set it here and it is used by both the in-app menu and the supervisor's log banner; leave it empty to auto-detect via the tailscale CLI. manageTailscaleServe lets the supervisor run 'tailscale serve' itself at startup so remote access survives reboots. tailscaleFunnel makes that 'tailscale funnel' instead: the same URL, but public on the internet so phones need no Tailscale app. The app has no login, so anyone with the URL can view and edit. Edit this file in the repo and push: the kiosk does git reset --hard on deploy, so edits made directly on the DreamQuest are discarded.",
   "publicUrl": "https://desktop-vsrg2sj.tail9e0d3f.ts.net",
-  "manageTailscaleServe": true
+  "manageTailscaleServe": true,
+  "tailscaleFunnel": true
 }

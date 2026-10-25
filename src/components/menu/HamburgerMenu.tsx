@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, Copy, Menu, Palette, Power, RefreshCw, RotateCcw } from "lucide-react";
+import { Check, Copy, Menu, Minimize2, Palette, Power, RefreshCw, RotateCcw } from "lucide-react";
 import { KioskInfo, fetchKioskInfo, getKioskShell } from "../../lib/runtime";
 import { QrCode } from "./QrCode";
 
@@ -188,6 +188,15 @@ export function HamburgerMenu({ syncing, canRefreshPhotos, onRefreshPhotos, onOp
 
           {shell && (
             <>
+              <div className="h-px bg-white/10" />
+              <MenuItem
+                icon={<Minimize2 size={16} />}
+                label="Minimize"
+                onClick={() => {
+                  setOpen(false);
+                  shell.minimize();
+                }}
+              />
               <div className="h-px bg-white/10" />
               <MenuItem
                 icon={<RotateCcw size={16} />}

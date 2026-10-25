@@ -123,6 +123,7 @@ function Stop-PortOwner {
 function Get-KioskConfig {
     $publicUrl   = ''
     $manageServe = $false
+    $funnel      = $false
 
     try {
         $configPath = Join-Path $RepoRoot 'kiosk.config.json'
@@ -136,13 +137,27 @@ function Get-KioskConfig {
             if ($names -contains 'manageTailscaleServe') {
                 $manageServe = [bool]$raw.manageTailscaleServe
             }
+            if ($names -contains 'tailscaleFunnel') {
+                $funnel = [bool]$raw.tailscaleFunnel
+            }
         }
     }
     catch {
         Write-Log "  could not read kiosk.config.json: $_"
     }
 
-    return [pscustomobject]@{ PublicUrl = $publicUrl; ManageServe = $manageServe }
+    return [pscustomobject]@{ PublicUrl = $publicUrl; ManageServe = $manageServe; Funnel = $funnel }
+}
+
+<#
+    True when Funnel is exposing our port to the public internet. 'funnel status'
+    marks each served host "(Funnel on)" or "(tailnet only)".
+#>
+function Test-FunnelOn {
+    $exe = Resolve-TailscaleExe
+    if (-not $exe) { return $false }
+    $status = (& $exe funnel status 2>$null) -join "`n"
+    return ($LASTEXITCODE -eq 0 -and $status -match '\(Funnel on\)' -and $status -match [regex]::Escape(":$Port"))
 }
 
 <#
@@ -151,7 +166,8 @@ function Get-KioskConfig {
     Idempotent, and never fatal.
 #>
 function Set-TailscaleServe {
-    if (-not (Get-KioskConfig).ManageServe) { return }
+    $config = Get-KioskConfig
+    if (-not $config.ManageServe) { return }
 
     $exe = Resolve-TailscaleExe
     if (-not $exe) {
@@ -159,12 +175,17 @@ function Set-TailscaleServe {
         return
     }
 
-    if (Test-ServeProxying) {
-        Write-Log "  tailscale serve already proxying $Port"
+    # Funnel is Serve plus a public listener, configured by the same one-arg
+    # command under a different verb. tailscaleFunnel=false never turns an
+    # existing Funnel off: do that by hand with 'tailscale funnel --https=443 off'.
+    $verb = if ($config.Funnel) { 'funnel' } else { 'serve' }
+    $done = if ($config.Funnel) { Test-FunnelOn } else { Test-ServeProxying }
+    if ($done) {
+        Write-Log "  tailscale $verb already proxying $Port"
         return
     }
 
-    Write-Log "  configuring tailscale serve -> http://localhost:$Port"
+    Write-Log "  configuring tailscale $verb -> http://localhost:$Port"
 
     # Tailscale 1.60 replaced 'serve --bg https / <target>' with a single
     # <target> argument. The old form does not degrade - it exits 1 with "the
@@ -173,18 +194,21 @@ function Set-TailscaleServe {
     # Spell the target as localhost rather than the bare-port shorthand: bare
     # '5173' means 127.0.0.1, but kiosk-server binds the hostname localhost and
     # on an IPv6-first machine listens on ::1 only, which 127.0.0.1 would miss.
-    $r = Invoke-NativeTimed -Exe $exe -Arguments @('serve', '--bg', "http://localhost:$Port")
+    $r = Invoke-NativeTimed -Exe $exe -Arguments @($verb, '--bg', "http://localhost:$Port")
     if ($r.ExitCode -ne 0) {
-        Write-Log "  WARNING: tailscale serve failed (exit $($r.ExitCode))"
+        Write-Log "  WARNING: tailscale $verb failed (exit $($r.ExitCode))"
         foreach ($l in ($r.Output -split "`n")) { Write-Log "  | $l" }
         if ($r.TimedOut -or ($r.Output -match 'not enabled on your tailnet')) {
             Write-Log '  Serve is disabled for this tailnet - an admin must enable it once,'
             Write-Log '  via the login.tailscale.com URL above. It sticks after that.'
         }
         Write-Log '  also check that HTTPS Certificates are enabled in the admin console'
+        if ($config.Funnel) {
+            Write-Log '  Funnel also needs the funnel nodeAttr in the tailnet policy file'
+        }
         return
     }
-    Write-Log '  tailscale serve configured'
+    Write-Log "  tailscale $verb configured"
 }
 
 <#
