@@ -173,14 +173,18 @@ async function kioskInfo(port) {
  * Static files only — no dev server, no HMR, no watching. See electron.js for
  * why the app is not loaded straight off disk with loadFile().
  *
- * @param {{ root: string, port?: number, host?: string }} options
+ * @param {{ root: string, port?: number, host?: string, api?: (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse) => boolean }} options
+ *   api: the kiosk backend from kiosk-api.js; gets first refusal on every request.
  * @returns {Promise<import('node:http').Server>}
  */
-export function serveStatic({ root, port = 5173, host = 'localhost' }) {
+export function serveStatic({ root, port = 5173, host = 'localhost', api }) {
   const DIST = path.resolve(root);
 
   return new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
+      if (api && api(req, res)) return;
+
+
       let pathname;
       try {
         pathname = decodeURIComponent(new URL(req.url, `http://${host}`).pathname);

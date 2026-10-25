@@ -1,15 +1,44 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import axios from "axios";
 import { CalendarEvent, CustomEvent, DatePhoto } from "../types";
 import { parseICS } from "../lib/icalParser";
-import { supabase } from "../lib/supabase";
 import { getHolidaysForRange } from "../lib/holidays";
 import { SlideshowPhoto, loadLocalGalleryPhotos } from "./useICloudPhotos";
 import { getAllDatePhotos, upsertDatePhoto, removeDatePhotosByDate, removeDatePhotoById } from "../lib/localPhotoDb";
 import { storeImage, getImageUrl, removeImage } from "../lib/localImageStore";
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+interface EventInput {
+  title: string;
+  description: string;
+  startTime: Date;
+  endTime: Date;
+  date: string;
+  allDay: boolean;
+}
+
+/**
+ * Calls the kiosk's own backend (kiosk-api.js). Same-origin, so it works on
+ * the kiosk, on a phone over Tailscale, and under `npm run dev` alike.
+ */
+async function kioskApi(path: string, init?: RequestInit): Promise<Response> {
+  const res = await fetch(`/__kiosk/${path}`, {
+    cache: "no-store",
+    ...init,
+    headers: init?.body ? { "Content-Type": "application/json" } : undefined,
+  });
+  if (!res.ok) throw new Error(`${path}: HTTP ${res.status}`);
+  return res;
+}
+
+function toRow(event: EventInput) {
+  return JSON.stringify({
+    title: event.title,
+    description: event.description,
+    start_time: event.startTime.toISOString(),
+    end_time: event.endTime.toISOString(),
+    date: event.date,
+    all_day: event.allDay,
+  });
+}
 
 export function useCalendar() {
   const [icloudEvents, setIcloudEvents] = useState<CalendarEvent[]>([]);
@@ -27,17 +56,7 @@ export function useCalendar() {
 
   const fetchICloudCalendar = useCallback(async () => {
     try {
-      const calendarUrl = import.meta.env.VITE_ICLOUD_CALENDAR_URL as string | undefined;
-      const { data } = await axios.post(
-        `${SUPABASE_URL}/functions/v1/icloud-calendar`,
-        calendarUrl ? { calendarUrl } : {},
-        {
-          headers: {
-            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      const data = await (await kioskApi("calendar")).json();
       if (data.ics) {
         const parsed = parseICS(data.ics);
         setIcloudEvents(parsed);
@@ -48,7 +67,12 @@ export function useCalendar() {
   }, []);
 
   const fetchLocalEvents = useCallback(async () => {
-    const { data } = await supabase.from("custom_events").select("*").order("start_time");
+    let data: CustomEvent[] | null = null;
+    try {
+      data = await (await kioskApi("events")).json();
+    } catch {
+      // keep the events already on screen
+    }
     if (data) {
       const mapped: CalendarEvent[] = data.map((e: CustomEvent) => ({
         id: e.id,
@@ -89,59 +113,29 @@ export function useCalendar() {
     return () => clearInterval(interval);
   }, [fetchICloudCalendar, fetchLocalEvents, fetchDatePhotos]);
 
-  const addEvent = async (event: {
-    title: string;
-    description: string;
-    startTime: Date;
-    endTime: Date;
-    date: string;
-    allDay: boolean;
-  }) => {
-    const { data, error } = await supabase
-      .from("custom_events")
-      .insert({
-        title: event.title,
-        description: event.description,
-        start_time: event.startTime.toISOString(),
-        end_time: event.endTime.toISOString(),
-        date: event.date,
-        all_day: event.allDay,
-      })
-      .select()
-      .single();
-
-    if (!error && data) {
+  const addEvent = async (event: EventInput) => {
+    try {
+      await kioskApi("events", { method: "POST", body: toRow(event) });
       await fetchLocalEvents();
+      return { error: null };
+    } catch (error) {
+      return { error: error as Error };
     }
-    return { error };
   };
 
   const deleteEvent = async (id: string) => {
-    await supabase.from("custom_events").delete().eq("id", id);
+    await kioskApi(`events/${id}`, { method: "DELETE" }).catch(() => null);
     await fetchLocalEvents();
   };
 
-  const updateEvent = async (id: string, event: {
-    title: string;
-    description: string;
-    startTime: Date;
-    endTime: Date;
-    date: string;
-    allDay: boolean;
-  }) => {
-    const { error } = await supabase
-      .from("custom_events")
-      .update({
-        title: event.title,
-        description: event.description,
-        start_time: event.startTime.toISOString(),
-        end_time: event.endTime.toISOString(),
-        date: event.date,
-        all_day: event.allDay,
-      })
-      .eq("id", id);
-    if (!error) await fetchLocalEvents();
-    return { error };
+  const updateEvent = async (id: string, event: EventInput) => {
+    try {
+      await kioskApi(`events/${id}`, { method: "PUT", body: toRow(event) });
+      await fetchLocalEvents();
+      return { error: null };
+    } catch (error) {
+      return { error: error as Error };
+    }
   };
 
   const addDatePhoto = async (date: string, file: File) => {

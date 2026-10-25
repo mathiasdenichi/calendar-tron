@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, Copy, Menu, Palette, RefreshCw } from "lucide-react";
-import { KioskInfo, fetchKioskInfo } from "../../lib/runtime";
+import { Check, Copy, Menu, Palette, Power, RefreshCw, RotateCcw } from "lucide-react";
+import { KioskInfo, fetchKioskInfo, getKioskShell } from "../../lib/runtime";
 import { QrCode } from "./QrCode";
 
 interface HamburgerMenuProps {
@@ -15,8 +15,16 @@ export function HamburgerMenu({ syncing, canRefreshPhotos, onRefreshPhotos, onOp
   const [open, setOpen] = useState(false);
   const [info, setInfo] = useState<KioskInfo | null>(null);
   const [copied, setCopied] = useState(false);
+  // Close needs a second tap: a stray touch on a wall display would otherwise
+  // leave it black until someone restarts the supervisor by hand.
+  const [confirmClose, setConfirmClose] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const urlRef = useRef<HTMLInputElement>(null);
+  const shell = getKioskShell();
+
+  useEffect(() => {
+    if (!open) setConfirmClose(false);
+  }, [open]);
 
   // Resolved lazily, and re-checked each time the menu opens so a newly
   // configured `tailscale serve` shows up without restarting the kiosk.
@@ -177,6 +185,24 @@ export function HamburgerMenu({ syncing, canRefreshPhotos, onRefreshPhotos, onOp
               </div>
             )}
           </div>
+
+          {shell && (
+            <>
+              <div className="h-px bg-white/10" />
+              <MenuItem
+                icon={<RotateCcw size={16} />}
+                label="Restart"
+                onClick={() => shell.restart()}
+              />
+              <div className="h-px bg-white/10" />
+              <MenuItem
+                icon={<Power size={16} />}
+                label={confirmClose ? "Tap again to close" : "Close"}
+                danger={confirmClose}
+                onClick={() => (confirmClose ? shell.close() : setConfirmClose(true))}
+              />
+            </>
+          )}
         </div>
       )}
     </div>
@@ -187,21 +213,23 @@ interface MenuItemProps {
   icon: React.ReactNode;
   label: string;
   disabled?: boolean;
+  danger?: boolean;
   onClick: () => void;
 }
 
-function MenuItem({ icon, label, disabled, onClick }: MenuItemProps) {
+function MenuItem({ icon, label, disabled, danger, onClick }: MenuItemProps) {
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      className="w-full flex items-center gap-3 px-4 py-3.5 text-left
-        text-white/85 text-sm font-medium
+      className={`w-full flex items-center gap-3 px-4 py-3.5 text-left
+        text-sm font-medium
         hover:bg-white/10 active:bg-white/15
         disabled:opacity-45 disabled:hover:bg-transparent disabled:cursor-not-allowed
-        transition-colors"
+        transition-colors
+        ${danger ? "text-red-400" : "text-white/85"}`}
     >
-      <span className="text-white/60">{icon}</span>
+      <span className={danger ? "text-red-400" : "text-white/60"}>{icon}</span>
       {label}
     </button>
   );

@@ -23,10 +23,10 @@ new error as a regression.
 
 | Data | Lives in | Survives a new device? |
 |---|---|---|
-| Custom events | Supabase `custom_events` | yes |
-| iCloud calendar | Supabase edge fn, published ICS | yes |
+| Custom events | **`%APPDATA%\calendar-tron\events.json` on the kiosk** | **no** — back it up |
+| iCloud calendar | published ICS, fetched by `kiosk-api.js` | yes |
+| Album photo cache | `%APPDATA%\calendar-tron\photos\` (~2–3 GB) | re-downloads itself |
 | Weather / radar | Open-Meteo / RainViewer | yes |
-| Slideshow photos | **IndexedDB on the kiosk** (~2.26 GB) | **no** |
 | Per-day calendar photos | **localStorage + IndexedDB on the kiosk** | **no** |
 | Theme + saved swatches | **localStorage on the kiosk** | **no** |
 
@@ -65,9 +65,20 @@ on the next poll instead of stranding the kiosk on a half-deploy.
 first, so a failure leaves no `vite` to build with *and* no `electron.exe` to
 launch. `Start-Kiosk` also repairs a missing `electron.exe` before launching.
 
-**Photo sync is gated to the kiosk** via `isKiosk()` in `src/lib/runtime.ts`
-(hostname is `localhost` only on the kiosk). A phone is a fresh origin with an
-empty cache and would otherwise pull ~2,980 full-resolution photos over cellular.
+**The kiosk is its own backend** (`kiosk-api.js`, mounted by `kiosk-server.js`
+and by `vite.config.ts` in dev). There is no Supabase any more. Phones hit the
+same `/__kiosk/*` endpoints through `tailscale serve`, so their photos come from
+the kiosk's disk cache rather than iCloud.
+
+**Phones get thumbnails for both photo tiers** via `isKiosk()` in
+`src/lib/runtime.ts` (hostname is `localhost` only on the kiosk). Full-size
+over cellular is ~666 KB a photo across ~3,000 photos.
+
+**The album manifest stores checksums, not download URLs.** iCloud's asset
+URLs are signed and expire within hours, so they are resolved just before each
+download, 25 photos per `webasseturls` call. One call for the whole album takes
+~50s *and silently drops items*. Listing the album itself (`webstream`) also
+takes ~50s, which is why it runs daily in the background, never per request.
 
 **`min-w-0` on the weather panel's left column** in `WeatherPanel.tsx`. A flex
 item defaults to `min-width: auto`, so the hourly strip's max-content width forces

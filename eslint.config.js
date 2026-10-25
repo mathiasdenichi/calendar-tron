@@ -9,7 +9,7 @@ export default tseslint.config(
   {
     // Electron main process — Node globals, not browser.
     extends: [js.configs.recommended],
-    files: ['electron.js', 'kiosk-server.js'],
+    files: ['electron.js', 'kiosk-server.js', 'kiosk-api.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',

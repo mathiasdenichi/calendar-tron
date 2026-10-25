@@ -49,16 +49,23 @@ session, and needs no runner registration, PAT, or inbound network access.
 
 ### 1. Config
 
-```powershell
-cd C:\path\to\calendar-tron
-copy .env.example .env
-notepad .env          # fill in VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
-```
+Nothing to set up: there is no external backend and no `.env`. The kiosk's own
+server (`kiosk-api.js`) fetches the iCloud calendar and shared album and stores
+custom events.
 
-Vite inlines these at build time, so a missing value bakes `undefined` into the
-bundle and the app white-screens on `createClient`. `.env` is gitignored and the
-supervisor uses `git reset --hard`, which leaves untracked files alone — so it
-survives every deploy.
+The published iCloud calendar URL and shared-album token default to the ones
+in `kiosk-api.js`. To point at different ones, add `calendarUrl` and/or
+`photosToken` to `kiosk.config.json` and push.
+
+**Data lives in `%APPDATA%\calendar-tron`**, outside the repo so
+`git reset --hard` can't touch it:
+
+- `events.json` — custom events. **Exists nowhere else; back it up.**
+- `photos\` — the shared album cached on disk (~2–3 GB once warm), plus
+  `manifest.json`. Disposable: delete it and it re-downloads from iCloud.
+
+Set `KIOSK_DATA_DIR` to move it. `npm run dev` on the same machine uses the same
+folder, so dev and the kiosk see the same events.
 
 ### 2. Make sure git can fetch unattended
 

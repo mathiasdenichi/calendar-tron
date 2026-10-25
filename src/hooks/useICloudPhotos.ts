@@ -1,21 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import axios from "axios";
-import { getImageUrls, getAllKeys, removeImages, downloadAndStore } from "../lib/localImageStore";
+import { getAllKeys, removeImages } from "../lib/localImageStore";
 import { isKiosk } from "../lib/runtime";
-
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
-
-const LOCAL_META_KEY = "slideshow_photos_meta";
-
-// Two cached tiers per photo: the full derivative drives the full-bleed slideshow,
-// the small one drives the strip and the picker grid. Storing only the small one
-// is what used to make the left panel look pixelated.
-const SLIDESHOW_PREFIX = "slideshow:";
-const fullKey = (guid: string) => `${SLIDESHOW_PREFIX}full:${guid}`;
-const thumbKey = (guid: string) => `${SLIDESHOW_PREFIX}thumb:${guid}`;
-
-const DOWNLOAD_CONCURRENCY = 6;
 
 export interface SlideshowPhoto {
   guid: string;
@@ -27,10 +12,8 @@ export interface SlideshowPhoto {
   height: number;
 }
 
-interface StoredPhotoMeta {
+interface AlbumEntry {
   guid: string;
-  originalUrl: string;
-  thumbUrl: string | null;
   width: number;
   height: number;
 }
@@ -44,83 +27,51 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-function loadStoredMeta(): StoredPhotoMeta[] {
+/**
+ * The album as the kiosk's backend has it (kiosk-api.js). The kiosk caches every
+ * photo on its own disk, so a phone over Tailscale is served from there rather
+ * than from iCloud, and the immutable cache headers make its reloads instant.
+ */
+async function fetchAlbum(): Promise<AlbumEntry[]> {
   try {
-    const raw = localStorage.getItem(LOCAL_META_KEY);
-    return raw ? (JSON.parse(raw) as StoredPhotoMeta[]) : [];
+    const res = await fetch("/__kiosk/photos", { cache: "no-store" });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data?.photos) ? data.photos : [];
   } catch {
     return [];
   }
 }
-
-function saveStoredMeta(metas: StoredPhotoMeta[]): void {
-  localStorage.setItem(LOCAL_META_KEY, JSON.stringify(metas));
-}
-
-/** Resolves cached blobs for a page of metadata, falling back to the remote URL. */
-async function hydrate(metas: StoredPhotoMeta[]): Promise<SlideshowPhoto[]> {
-  const keys: string[] = [];
-  for (const m of metas) {
-    keys.push(fullKey(m.guid), thumbKey(m.guid));
-  }
-  const urls = await getImageUrls(keys);
-
-  return metas.map((m) => {
-    const full = urls.get(fullKey(m.guid)) ?? m.originalUrl;
-    const thumb = urls.get(thumbKey(m.guid)) ?? m.thumbUrl ?? full;
-    return { guid: m.guid, url: full, thumbUrl: thumb, width: m.width, height: m.height };
-  });
-}
-
-/** Runs tasks with a bounded number in flight. Never rejects. */
-async function runPool<T>(items: T[], limit: number, worker: (item: T) => Promise<void>): Promise<void> {
-  let cursor = 0;
-  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (cursor < items.length) {
-      const item = items[cursor++];
-      await worker(item).catch(() => undefined);
-    }
-  });
-  await Promise.all(runners);
-}
-
-const VIDEO_EXTS = /\.(mp4|mov|m4v|avi|mkv|webm|3gp|hevc|heic\.mp4)(\?|$)/i;
 
 /**
- * Photo list for devices that do not cache: phones.
- *
- * Both url and thumbUrl point at the small derivative (~257x342, ~74 KB) rather
- * than the full one (~666 KB), and nothing is written to localStorage or
- * IndexedDB - a phone should neither fill its storage nor pull the full-
- * resolution library over cellular.
+ * Phones get the small derivative (~74 KB) for both tiers, not the full one
+ * (~666 KB): over cellular, the whole library at full size is gigabytes.
  */
-async function loadRemoteThumbnails(): Promise<SlideshowPhoto[]> {
+function toPhoto(entry: AlbumEntry): SlideshowPhoto {
+  const base = `/__kiosk/photo/${encodeURIComponent(entry.guid)}`;
+  const thumbUrl = `${base}/thumb`;
+  return {
+    guid: entry.guid,
+    url: isKiosk() ? `${base}/full` : thumbUrl,
+    thumbUrl,
+    width: entry.width,
+    height: entry.height,
+  };
+}
+
+/**
+ * Before the kiosk cached photos on disk it kept them in IndexedDB - about
+ * 2.26 GB on the DreamQuest. Nothing reads those any more; reclaim the space.
+ * Only `slideshow:` keys: the per-day calendar photos (`date:`) share the store
+ * and exist nowhere else.
+ */
+async function dropLegacyBrowserCache(): Promise<void> {
   try {
-    const token = import.meta.env.VITE_ICLOUD_PHOTOS_TOKEN as string | undefined;
-    const { data } = await axios.post(
-      `${SUPABASE_URL}/functions/v1/icloud-photos`,
-      token ? { token } : {},
-      {
-        headers: {
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
-
-    if (!Array.isArray(data?.photos)) return [];
-
-    const incoming: Array<{ guid: string; url: string; thumbUrl: string; width: number; height: number }> =
-      data.photos;
-
-    return incoming
-      .filter((p) => !VIDEO_EXTS.test(p.url))
-      .map((p) => {
-        const small = p.thumbUrl || p.url;
-        return { guid: p.guid, url: small, thumbUrl: small, width: p.width, height: p.height };
-      });
+    localStorage.removeItem("slideshow_photos_meta");
+    const stale = (await getAllKeys()).filter((k) => k.startsWith("slideshow:"));
+    if (stale.length > 0) await removeImages(stale);
   } catch {
-    return [];
+    // best effort
   }
 }
 
@@ -165,126 +116,38 @@ export function useICloudPhotos() {
     // nextIndex is intentionally NOT updated here
   }, []);
 
-  const loadFromLocal = useCallback(async (): Promise<SlideshowPhoto[]> => {
-    const metas = loadStoredMeta().filter((m) => !VIDEO_EXTS.test(m.originalUrl));
-    if (metas.length === 0) return [];
-    return hydrate(metas);
+  const load = useCallback(async () => {
+    const album = await fetchAlbum();
+    if (album.length === 0) return;
+    // An hourly refresh must not reshuffle the slideshow under the viewer, so
+    // only replace the list when the album's membership actually changed.
+    setPhotos((prev) => {
+      const known = new Set(prev.map((p) => p.guid));
+      const same = prev.length === album.length && album.every((p) => known.has(p.guid));
+      return same ? prev : shuffle(album.map(toPhoto));
+    });
   }, []);
 
-  const runSync = useCallback(async (showSyncing = false) => {
-    // Only the kiosk caches photos. See isKiosk() — a phone would pull the whole
-    // library over its data plan, and the slideshow is a wall-display feature.
-    if (!isKiosk()) return;
-    if (showSyncing) setSyncing(true);
+  /** Menu > Refresh photos: has the kiosk re-list the album right now. */
+  const syncNow = useCallback(async () => {
+    setSyncing(true);
     try {
-      const token = import.meta.env.VITE_ICLOUD_PHOTOS_TOKEN as string | undefined;
-      const { data } = await axios.post(
-        `${SUPABASE_URL}/functions/v1/icloud-photos`,
-        token ? { token } : {},
-        {
-          headers: {
-            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      if (!Array.isArray(data?.photos)) return;
-
-      const incoming: Array<{ guid: string; url: string; thumbUrl: string; width: number; height: number }> = data.photos;
-
-      const newMetas: StoredPhotoMeta[] = [];
-      for (const p of incoming) {
-        if (VIDEO_EXTS.test(p.url)) continue;
-        newMetas.push({
-          guid: p.guid,
-          originalUrl: p.url,
-          thumbUrl: p.thumbUrl || null,
-          width: p.width,
-          height: p.height,
-        });
-      }
-
-      if (newMetas.length === 0) return;
-
-      saveStoredMeta(newMetas);
-
-      // Show full-resolution immediately by streaming from iCloud; the local
-      // cache below just makes subsequent loads instant.
-      if (photosLengthRef.current === 0) {
-        const remote = await hydrate(newMetas);
-        if (remote.length > 0) setPhotos(shuffle(remote));
-      }
-
-      const existingKeys = new Set(await getAllKeys());
-
-      const jobs: Array<{ key: string; url: string }> = [];
-      for (const m of newMetas) {
-        const fk = fullKey(m.guid);
-        const tk = thumbKey(m.guid);
-        if (!existingKeys.has(fk)) jobs.push({ key: fk, url: m.originalUrl });
-        if (!existingKeys.has(tk)) jobs.push({ key: tk, url: m.thumbUrl || m.originalUrl });
-      }
-
-      // Drop blobs for photos no longer in the album, plus the legacy
-      // single-tier `slideshow:<guid>` entries from before the two-tier split.
-      const wanted = new Set(jobs.map((j) => j.key));
-      for (const m of newMetas) {
-        wanted.add(fullKey(m.guid));
-        wanted.add(thumbKey(m.guid));
-      }
-      const stale = [...existingKeys].filter((k) => k.startsWith(SLIDESHOW_PREFIX) && !wanted.has(k));
-      if (stale.length > 0) await removeImages(stale);
-
-      await runPool(jobs, DOWNLOAD_CONCURRENCY, async ({ key, url }) => {
-        await downloadAndStore(key, url);
-      });
-
-      const fresh = await loadFromLocal();
-      if (fresh.length > 0) {
-        setPhotos(shuffle(fresh));
-      }
+      await fetch("/__kiosk/photos/sync", { method: "POST" });
+      await load();
     } catch {
-      // silently fail
+      // keep what is on screen
     } finally {
-      if (showSyncing) setSyncing(false);
+      setSyncing(false);
     }
-  }, [loadFromLocal]);
-
-  const syncNow = useCallback(() => runSync(true), [runSync]);
+  }, [load]);
 
   useEffect(() => {
-    async function init() {
-      if (!isKiosk()) {
-        // Stream thumbnails instead of caching. See loadRemoteThumbnails.
-        const remote = await loadRemoteThumbnails();
-        if (remote.length > 0) setPhotos(shuffle(remote));
-        setLoading(false);
-        return;
-      }
-
-      const localPhotos = await loadFromLocal();
-
-      if (localPhotos.length > 0) {
-        setPhotos(shuffle(localPhotos));
-        setLoading(false);
-        runSync(false);
-      } else {
-        setSyncing(true);
-        await runSync(false);
-        const synced = await loadFromLocal();
-        if (synced.length > 0) setPhotos(shuffle(synced));
-        setSyncing(false);
-        setLoading(false);
-      }
-    }
-
-    init();
-
-    if (!isKiosk()) return;
-    const refreshInterval = setInterval(() => runSync(false), 24 * 60 * 60 * 1000);
-    return () => clearInterval(refreshInterval);
-  }, [loadFromLocal, runSync]);
+    if (isKiosk()) dropLegacyBrowserCache();
+    load().finally(() => setLoading(false));
+    // The backend re-lists the album daily by itself; this just picks that up.
+    const refresh = setInterval(load, 60 * 60 * 1000);
+    return () => clearInterval(refresh);
+  }, [load]);
 
   // Timer always advances via advanceNext — stable, no stale closure on displayIndex
   useEffect(() => {
@@ -295,7 +158,8 @@ export function useICloudPhotos() {
     };
   }, [photos.length, advanceNext]);
 
-  const currentPhoto = photos.length > 0 ? photos[displayIndex] : null;
+  // Modulo: an album that shrank on refresh can leave displayIndex past the end.
+  const currentPhoto = photos.length > 0 ? photos[displayIndex % photos.length] : null;
   // upcomingIndex is always based on nextIndex, not displayIndex
   const upcomingIndex = photos.length > 1 ? (nextIndexRef.current + 1) % photos.length : null;
 
@@ -313,12 +177,11 @@ export function useICloudPhotos() {
   };
 }
 
-// Exported for useCalendar gallery loader
+// Exported for useCalendar gallery loader. Kiosk-only: per-day photos are saved
+// in the kiosk browser's own storage, so a pick made on a phone would go nowhere.
 export async function loadLocalGalleryPhotos(offset = 0, pageSize = 25): Promise<{ photos: SlideshowPhoto[]; hasMore: boolean }> {
   if (!isKiosk()) return { photos: [], hasMore: false };
-  const metas = loadStoredMeta().filter((m) => !VIDEO_EXTS.test(m.originalUrl));
-  if (metas.length === 0) return { photos: [], hasMore: false };
-
-  const page = metas.slice(offset, offset + pageSize);
-  return { photos: await hydrate(page), hasMore: offset + pageSize < metas.length };
+  const album = await fetchAlbum();
+  const page = album.slice(offset, offset + pageSize).map(toPhoto);
+  return { photos: page, hasMore: offset + pageSize < album.length };
 }

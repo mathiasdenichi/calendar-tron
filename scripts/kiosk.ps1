@@ -31,6 +31,15 @@ $LogFile     = Join-Path $RepoRoot 'kiosk.log'
 
 $script:Kiosk = $null
 
+# Electron exits with this when someone picks Close in the in-app menu. Any
+# other exit is relaunched; this one ends the supervisor so the desktop stays
+# usable. Keep in sync with CLOSE_EXIT_CODE in electron.js.
+$CloseExitCode = 64
+
+# Tells electron.js we will relaunch it, so Restart must not relaunch itself
+# too. Inherited by every Start-Process below.
+$env:KIOSK_SUPERVISED = '1'
+
 function Write-Log {
     param([string]$Message)
     $line = '{0}  {1}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Message
@@ -340,6 +349,9 @@ function Start-Kiosk {
     Write-Log '  starting kiosk'
     $script:Kiosk = Start-Process -FilePath $ElectronExe -ArgumentList '.' `
                                   -WorkingDirectory $RepoRoot -PassThru
+    # Retain the OS handle now, or .ExitCode reads back empty once it exits and
+    # the menu's Close could not be told apart from a crash. See Invoke-NativeTimed.
+    $null = $script:Kiosk.Handle
 }
 
 function Invoke-Deploy {
@@ -387,10 +399,6 @@ Set-Location -LiteralPath $RepoRoot
 Write-Log '=== kiosk supervisor starting ==='
 Write-Log "repo: $RepoRoot"
 
-if (-not (Test-Path -LiteralPath (Join-Path $RepoRoot '.env'))) {
-    Write-Log 'WARNING: no .env found - the build will ship without Supabase config'
-}
-
 try {
     if (-not (Test-Path -LiteralPath $ElectronExe)) {
         Invoke-Step 'npm ci (first run)' 'npm.cmd' @('ci')
@@ -416,6 +424,12 @@ while ($true) {
 
     # Checked far more often than the git poll - a black screen should come back
     # in seconds, not on the next deploy tick.
+    if ($script:Kiosk -and $script:Kiosk.HasExited -and $script:Kiosk.ExitCode -eq $CloseExitCode) {
+        Write-Log 'kiosk closed from the menu - supervisor exiting'
+        Write-Log '  run scripts\kiosk.ps1 again (or log off and on) to bring it back'
+        exit 0
+    }
+
     if (($null -eq $script:Kiosk) -or $script:Kiosk.HasExited) {
         Write-Log 'kiosk not running - starting'
         try { Start-Kiosk } catch { Write-Log "restart failed: $_" }

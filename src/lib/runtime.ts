@@ -48,3 +48,20 @@ export async function fetchKioskInfo(): Promise<KioskInfo> {
     return { url: null, serving: false };
   }
 }
+
+export interface KioskShell {
+  restart: () => Promise<void>;
+  close: () => Promise<void>;
+}
+
+declare global {
+  interface Window {
+    /** Injected by electron-preload.cjs; absent in a phone or desktop browser. */
+    kioskShell?: KioskShell;
+  }
+}
+
+/** Window controls, present only inside the Electron kiosk window. */
+export function getKioskShell(): KioskShell | null {
+  return window.kioskShell ?? null;
+}

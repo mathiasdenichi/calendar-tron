@@ -1,8 +1,9 @@
-import { app, BrowserWindow, globalShortcut } from 'electron';
+import { app, BrowserWindow, globalShortcut, ipcMain } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { serveStatic } from './kiosk-server.js';
+import { createKioskApi } from './kiosk-api.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.join(__dirname, 'dist');
@@ -33,6 +34,12 @@ const HOST = process.env.KIOSK_HOST || 'localhost';
 // Set KIOSK_DEV_URL to point at a running `npm run dev` instead of dist/.
 const devUrl = process.env.KIOSK_DEV_URL;
 
+// scripts/kiosk.ps1 sets this. Under the supervisor, any exit is followed by a
+// relaunch within ~5s, so Restart only has to exit and Close has to tell it to
+// stand down instead. Keep CLOSE_EXIT_CODE in sync with $CloseExitCode there.
+const supervised = process.env.KIOSK_SUPERVISED === '1';
+const CLOSE_EXIT_CODE = 64;
+
 let win = null;
 let quitting = false;
 
@@ -46,6 +53,7 @@ function createWindow(url) {
     backgroundColor: '#030712',
     show: false,
     webPreferences: {
+      preload: path.join(__dirname, 'electron-preload.cjs'),
       nodeIntegration: false,
       contextIsolation: true,
       // The kiosk must keep ticking even if the window is ever occluded —
@@ -81,7 +89,7 @@ app.whenReady().then(async () => {
     if (!fs.existsSync(path.join(DIST, 'index.html'))) {
       throw new Error('dist/index.html is missing — run `npm run build` first');
     }
-    await serveStatic({ root: DIST, port: PORT, host: HOST });
+    await serveStatic({ root: DIST, port: PORT, host: HOST, api: createKioskApi() });
     url = `http://${HOST}:${PORT}/`;
   }
 
@@ -92,6 +100,21 @@ app.whenReady().then(async () => {
   globalShortcut.register('Control+Shift+Q', () => {
     quitting = true;
     app.quit();
+  });
+
+  // Menu > Restart. Unsupervised there is nobody to bring us back, so relaunch
+  // ourselves; supervised, relaunching too would race the supervisor for the port.
+  ipcMain.handle('kiosk:restart', () => {
+    quitting = true;
+    if (!supervised) app.relaunch();
+    app.exit(0);
+  });
+
+  // Menu > Close. The distinct exit code is what stops the supervisor from
+  // relaunching - a plain exit would be back on screen in five seconds.
+  ipcMain.handle('kiosk:close', () => {
+    quitting = true;
+    app.exit(supervised ? CLOSE_EXIT_CODE : 0);
   });
 }).catch((err) => {
   // Most likely EADDRINUSE because a previous kiosk (or `npm run dev`) still
