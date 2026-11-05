@@ -167,9 +167,16 @@ export function loadTheme(): Theme {
       if (valid) colors[key] = valid;
     }
 
-    const storedDecor = parsed?.decor;
-    const decor: DecorId = DECOR_IDS.includes(storedDecor) ? storedDecor : "none";
     const presetId = typeof parsed?.presetId === "string" ? presetById(parsed.presetId).id : "default";
+    // Decor follows the preset, not what was stored: it isn't user-editable,
+    // so a stored value is only ever a stale copy. Trusting it left themes
+    // saved before a preset gained decor stuck on "none" - the kiosk kept a
+    // plain Thanksgiving after turkeys shipped. Pre-preset saves have no
+    // presetId and fall back to whatever decor they recorded.
+    const decor: DecorId =
+      typeof parsed?.presetId === "string"
+        ? presetById(presetId).decor
+        : DECOR_IDS.includes(parsed?.decor) ? parsed.decor : "none";
 
     return { colors, decor, presetId };
   } catch {
