@@ -9,7 +9,9 @@ export type ThemeColorKey =
   | "timeColor";
 
 /** Non-color decoration a preset can switch on (icon swaps, day markers). */
-export type DecorId = "none" | "halloween" | "gingey";
+export type DecorId = "none" | "halloween" | "gingey" | "thanksgiving" | "christmas";
+
+const DECOR_IDS: readonly DecorId[] = ["none", "halloween", "gingey", "thanksgiving", "christmas"];
 
 export interface Theme {
   colors: Record<ThemeColorKey, string>;
@@ -112,7 +114,7 @@ export const PRESETS: Preset[] = [
       eventColor: "#b4462a",
       timeColor: "#e8863a",
     },
-    decor: "none",
+    decor: "thanksgiving",
     provisional: true,
   },
   {
@@ -127,7 +129,7 @@ export const PRESETS: Preset[] = [
       eventColor: "#1f8a44",
       timeColor: "#f2d675",
     },
-    decor: "none",
+    decor: "christmas",
     provisional: true,
   },
 ];
@@ -166,8 +168,7 @@ export function loadTheme(): Theme {
     }
 
     const storedDecor = parsed?.decor;
-    const decor: DecorId =
-      storedDecor === "halloween" || storedDecor === "gingey" ? storedDecor : "none";
+    const decor: DecorId = DECOR_IDS.includes(storedDecor) ? storedDecor : "none";
     const presetId = typeof parsed?.presetId === "string" ? presetById(parsed.presetId).id : "default";
 
     return { colors, decor, presetId };

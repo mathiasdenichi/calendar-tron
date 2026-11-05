@@ -131,8 +131,13 @@ See `docs/kiosk-setup.md` for the full deployment story.
 
 ## Open items
 
-- `Thanksgiving` and `Christmas` presets have placeholder palettes and no decor,
-  awaiting a spec. `halloween` and `gingey` are complete.
+- `Thanksgiving` has decor (turkeys behind every day number; the Gingey bichon
+  in a Santa hat as the sun, with rays behind it, as the cloud in
+  partly-cloudy, the three rain icons and thunderstorm, as a pair for cloudy,
+  and half-transparent behind the fog lines) but its palette is still a
+  placeholder. Only snow keeps the standard icon. `Christmas` shares those
+  weather icons only - no day artwork, so its grid keeps the blue today chip -
+  and also has a placeholder palette. `halloween` and `gingey` are complete.
 - No phone layout. Only `portrait:`/`landscape:` variants exist — a 390px screen
   gets a seven-column grid. An agenda view is the likely answer.
 - No service worker. Add to Home Screen works without one; caching against a

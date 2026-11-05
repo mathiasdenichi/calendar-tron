@@ -4,6 +4,7 @@ import { JackOLanternShape } from "../theme/JackOLantern";
 import { WitchOnBroomShape } from "../theme/art/WitchOnBroom";
 import { BichonFriseShape } from "../theme/art/BichonFrise";
 import { KittyHeadShape } from "../theme/art/KittyHead";
+import { SantaHatShape } from "../theme/art/SantaHat";
 
 interface WeatherIconProps {
   condition: WeatherCondition;
@@ -40,6 +41,19 @@ function renderCondition(condition: WeatherCondition, decor: string) {
   if (decor === "gingey") {
     if (condition === "clear") return <KittySunIcon />;
     if (condition === "partly-cloudy" || condition === "cloudy") return <BichonIcon />;
+  }
+  if (decor === "thanksgiving" || decor === "christmas") {
+    // The Santa bichon stands in for the sun and for every cloud it can
+    // replace without losing the forecast: partly cloudy keeps its sun, and the
+    // rain and storm icons keep their drops and lightning underneath.
+    if (condition === "clear") return <SantaBichonIcon />;
+    if (condition === "partly-cloudy") return <PartlyCloudyIcon santa />;
+    if (condition === "drizzle") return <DrizzleIcon santa />;
+    if (condition === "rain") return <RainIcon santa />;
+    if (condition === "heavy-rain") return <HeavyRainIcon santa />;
+    if (condition === "thunderstorm") return <ThunderstormIcon santa />;
+    if (condition === "cloudy") return <SantaCloudyIcon />;
+    if (condition === "foggy") return <FogIcon santa />;
   }
 
   switch (condition) {
@@ -127,6 +141,78 @@ function BichonIcon() {
   );
 }
 
+/** The Gingey bichon in a Santa hat, standing in for the sun. */
+function SantaBichonIcon() {
+  return (
+    <g>
+      <style>{`
+        @keyframes santa-bichon-bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-2px)} }
+        @keyframes santa-sun-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .santa-bichon { animation: santa-bichon-bob 4s ease-in-out infinite; }
+        .santa-sun-rays { animation: santa-sun-spin 12s linear infinite; transform-origin: 40px 44px; }
+      `}</style>
+      {/* Rays behind the head, centred on the face. The origin is safe here:
+          this <g> rotates and has no transform attribute of its own. */}
+      <g className="santa-sun-rays">
+        {[0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330].map((angle) => (
+          <line
+            key={angle}
+            x1="40" y1="10" x2="40" y2="19"
+            stroke="#FFD700" strokeWidth="3" strokeLinecap="round"
+            transform={`rotate(${angle} 40 44)`}
+          />
+        ))}
+      </g>
+      {/* Scaled down from full size so the rays fit around it inside the
+          viewBox. The bob lives on an outer <g>: the inner one's transform
+          attribute would be overridden by the animated CSS transform otherwise. */}
+      <g className="santa-bichon">
+        <SantaBichon transform="translate(17 18) scale(0.72)" />
+      </g>
+    </g>
+  );
+}
+
+/**
+ * Bichon plus hat on the 64-unit grid; spans roughly x 3-62, y -10-58 there,
+ * since the hat rises above the head. Callers place and scale it with a
+ * transform, and must animate an outer <g> rather than this one - a CSS
+ * animation's transform replaces the transform attribute on the same element.
+ */
+function SantaBichon({ transform }: { transform: string }) {
+  return (
+    <g transform={transform}>
+      <BichonFriseShape />
+      <SantaHatShape />
+    </g>
+  );
+}
+
+/**
+ * Overcast: two bichons where the cloud bank would be - a smaller one behind,
+ * a larger one in front - bobbing out of step like drifting clouds.
+ */
+function SantaCloudyIcon() {
+  return (
+    <g>
+      <style>{`
+        @keyframes santa-cloud-bob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-3px)} }
+        .santa-cloud-back { animation: santa-cloud-bob 5s ease-in-out infinite; }
+        .santa-cloud-front { animation: santa-cloud-bob 5s ease-in-out -2.5s infinite; }
+      `}</style>
+      <g className="santa-cloud-back">
+        <SantaBichon transform="translate(6 12) scale(0.5)" />
+      </g>
+      <g className="santa-cloud-front">
+        <SantaBichon transform="translate(26 30) scale(0.6)" />
+      </g>
+    </g>
+  );
+}
+
+/** Where a small Santa bichon sits in place of the rain cloud (y ~1-43). */
+const RAIN_CLOUD_BICHON = "translate(20 7) scale(0.62)";
+
 function PumpkinIcon() {
   return (
     <g>
@@ -166,7 +252,7 @@ function SunIcon() {
   );
 }
 
-function PartlyCloudyIcon() {
+function PartlyCloudyIcon({ santa = false }: { santa?: boolean }) {
   return (
     <g>
       <style>{`
@@ -184,10 +270,17 @@ function PartlyCloudyIcon() {
         ))}
       </g>
       <g className="pc-cloud">
-        <ellipse cx="44" cy="48" rx="18" ry="12" fill="white" opacity="0.95" />
-        <circle cx="32" cy="48" r="10" fill="white" opacity="0.95" />
-        <circle cx="50" cy="44" r="12" fill="white" opacity="0.95" />
-        <rect x="24" y="48" width="38" height="12" fill="white" opacity="0.95" />
+        {santa ? (
+          // Lower right, where the cloud sits, so the sun still peeks out.
+          <SantaBichon transform="translate(27 34) scale(0.6)" />
+        ) : (
+          <>
+            <ellipse cx="44" cy="48" rx="18" ry="12" fill="white" opacity="0.95" />
+            <circle cx="32" cy="48" r="10" fill="white" opacity="0.95" />
+            <circle cx="50" cy="44" r="12" fill="white" opacity="0.95" />
+            <rect x="24" y="48" width="38" height="12" fill="white" opacity="0.95" />
+          </>
+        )}
       </g>
     </g>
   );
@@ -211,13 +304,20 @@ function CloudIcon() {
   );
 }
 
-function FogIcon() {
+function FogIcon({ santa = false }: { santa?: boolean }) {
   return (
     <g>
       <style>{`
         @keyframes fog-drift { 0%{opacity:0.4;transform:translateX(-4px)} 50%{opacity:0.9;transform:translateX(4px)} 100%{opacity:0.4;transform:translateX(-4px)} }
         .fog-line { animation: fog-drift var(--d,4s) ease-in-out infinite; }
       `}</style>
+      {/* Behind the fog, and half transparent: the fog lines are white too,
+          and would vanish against a solid white coat. */}
+      {santa && (
+        <g opacity="0.5">
+          <SantaBichon transform="translate(14 14) scale(0.8)" />
+        </g>
+      )}
       {[24, 34, 44, 54].map((y, i) => (
         <rect key={i} className="fog-line" x="10" y={y} width={50 - (i % 2) * 10} height="5"
           rx="2.5" fill="white" opacity="0.6" style={{ "--d": `${3 + i * 0.7}s` } as React.CSSProperties} />
@@ -226,17 +326,23 @@ function FogIcon() {
   );
 }
 
-function DrizzleIcon() {
+function DrizzleIcon({ santa = false }: { santa?: boolean }) {
   return (
     <g>
       <style>{`
         @keyframes drizzle-fall { 0%{transform:translateY(-10px);opacity:0} 80%{opacity:1} 100%{transform:translateY(15px);opacity:0} }
         .drop { animation: drizzle-fall 1.5s ease-in infinite; }
       `}</style>
-      <ellipse cx="40" cy="30" rx="22" ry="14" fill="white" opacity="0.85" />
-      <circle cx="24" cy="30" r="12" fill="white" opacity="0.85" />
-      <circle cx="46" cy="24" r="15" fill="white" opacity="0.85" />
-      <rect x="12" y="30" width="54" height="12" fill="white" opacity="0.85" />
+      {santa ? (
+        <SantaBichon transform={RAIN_CLOUD_BICHON} />
+      ) : (
+        <>
+          <ellipse cx="40" cy="30" rx="22" ry="14" fill="white" opacity="0.85" />
+          <circle cx="24" cy="30" r="12" fill="white" opacity="0.85" />
+          <circle cx="46" cy="24" r="15" fill="white" opacity="0.85" />
+          <rect x="12" y="30" width="54" height="12" fill="white" opacity="0.85" />
+        </>
+      )}
       {[24, 34, 44, 54].map((x, i) => (
         <line key={i} className="drop" x1={x} y1="48" x2={x - 3} y2="58"
           stroke="#90CAF9" strokeWidth="2.5" strokeLinecap="round"
@@ -246,17 +352,23 @@ function DrizzleIcon() {
   );
 }
 
-function RainIcon() {
+function RainIcon({ santa = false }: { santa?: boolean }) {
   return (
     <g>
       <style>{`
         @keyframes rain-fall { 0%{transform:translateY(-10px);opacity:0} 70%{opacity:1} 100%{transform:translateY(18px);opacity:0} }
         .raindrop { animation: rain-fall 1s ease-in infinite; }
       `}</style>
-      <ellipse cx="40" cy="28" rx="22" ry="13" fill="#B0BEC5" opacity="0.9" />
-      <circle cx="24" cy="28" r="11" fill="#B0BEC5" opacity="0.9" />
-      <circle cx="46" cy="22" r="14" fill="#B0BEC5" opacity="0.9" />
-      <rect x="12" y="28" width="54" height="11" fill="#B0BEC5" opacity="0.9" />
+      {santa ? (
+        <SantaBichon transform={RAIN_CLOUD_BICHON} />
+      ) : (
+        <>
+          <ellipse cx="40" cy="28" rx="22" ry="13" fill="#B0BEC5" opacity="0.9" />
+          <circle cx="24" cy="28" r="11" fill="#B0BEC5" opacity="0.9" />
+          <circle cx="46" cy="22" r="14" fill="#B0BEC5" opacity="0.9" />
+          <rect x="12" y="28" width="54" height="11" fill="#B0BEC5" opacity="0.9" />
+        </>
+      )}
       {[22, 32, 42, 52, 62].map((x, i) => (
         <line key={i} className="raindrop" x1={x} y1="46" x2={x - 4} y2="60"
           stroke="#42A5F5" strokeWidth="2.5" strokeLinecap="round"
@@ -266,17 +378,23 @@ function RainIcon() {
   );
 }
 
-function HeavyRainIcon() {
+function HeavyRainIcon({ santa = false }: { santa?: boolean }) {
   return (
     <g>
       <style>{`
         @keyframes heavy-rain { 0%{transform:translateY(-8px);opacity:0} 60%{opacity:1} 100%{transform:translateY(20px);opacity:0} }
         .hraindrop { animation: heavy-rain 0.7s ease-in infinite; }
       `}</style>
-      <ellipse cx="40" cy="26" rx="22" ry="13" fill="#78909C" opacity="0.95" />
-      <circle cx="24" cy="26" r="11" fill="#78909C" opacity="0.95" />
-      <circle cx="46" cy="20" r="14" fill="#78909C" opacity="0.95" />
-      <rect x="12" y="26" width="54" height="11" fill="#78909C" opacity="0.95" />
+      {santa ? (
+        <SantaBichon transform={RAIN_CLOUD_BICHON} />
+      ) : (
+        <>
+          <ellipse cx="40" cy="26" rx="22" ry="13" fill="#78909C" opacity="0.95" />
+          <circle cx="24" cy="26" r="11" fill="#78909C" opacity="0.95" />
+          <circle cx="46" cy="20" r="14" fill="#78909C" opacity="0.95" />
+          <rect x="12" y="26" width="54" height="11" fill="#78909C" opacity="0.95" />
+        </>
+      )}
       {[18, 26, 34, 42, 50, 58, 66].map((x, i) => (
         <line key={i} className="hraindrop" x1={x} y1="44" x2={x - 5} y2="62"
           stroke="#1E88E5" strokeWidth="2.5" strokeLinecap="round"
@@ -306,7 +424,7 @@ function SnowIcon() {
   );
 }
 
-function ThunderstormIcon() {
+function ThunderstormIcon({ santa = false }: { santa?: boolean }) {
   return (
     <g>
       <style>{`
@@ -315,11 +433,18 @@ function ThunderstormIcon() {
         .storm-cloud { animation: lightning-flash 3s ease-in-out infinite; }
         .storm-drop { animation: storm-rain 0.8s ease-in infinite; }
       `}</style>
+      {/* The flash is opacity-only, so it can wrap the bichon's own transform. */}
       <g className="storm-cloud">
-        <ellipse cx="40" cy="26" rx="22" ry="13" fill="#546E7A" opacity="0.95" />
-        <circle cx="24" cy="26" r="11" fill="#546E7A" opacity="0.95" />
-        <circle cx="46" cy="20" r="14" fill="#546E7A" opacity="0.95" />
-        <rect x="12" y="26" width="54" height="11" fill="#546E7A" opacity="0.95" />
+        {santa ? (
+          <SantaBichon transform={RAIN_CLOUD_BICHON} />
+        ) : (
+          <>
+            <ellipse cx="40" cy="26" rx="22" ry="13" fill="#546E7A" opacity="0.95" />
+            <circle cx="24" cy="26" r="11" fill="#546E7A" opacity="0.95" />
+            <circle cx="46" cy="20" r="14" fill="#546E7A" opacity="0.95" />
+            <rect x="12" y="26" width="54" height="11" fill="#546E7A" opacity="0.95" />
+          </>
+        )}
       </g>
       <polygon points="38,40 32,56 39,52 34,68 48,48 40,52 44,40" fill="#FFD600" opacity="0.95" />
       {[20, 58].map((x, i) => (

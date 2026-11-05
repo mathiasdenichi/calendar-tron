@@ -4,6 +4,7 @@ import { useDecor } from "../../hooks/useTheme";
 import { JackOLantern, PUMPKIN_BODY_OFFSET } from "../theme/JackOLantern";
 import { Skull } from "../theme/art/Skull";
 import { KittyHead, KITTY_FACE_OFFSET } from "../theme/art/KittyHead";
+import { Turkey, TURKEY_BODY_OFFSET } from "../theme/art/Turkey";
 
 interface DayCellProps {
   date: Date | null;
@@ -19,8 +20,10 @@ export function DayCell({ date, isCurrentMonth, isToday, events, photos, onDoubl
   const decor = useDecor();
   const spooky = decor === "halloween";
   const gingey = decor === "gingey";
-  // Any decor preset drives today's ring and wash from the theme, not blue.
-  const decorated = decor !== "none";
+  const thanksgiving = decor === "thanksgiving";
+  // Presets with day artwork drive today's ring and wash from the theme, not
+  // blue. Christmas decor is weather-only, so its grid keeps the blue chip.
+  const decorated = spooky || gingey || thanksgiving;
 
   if (!date) {
     return <div className="bg-transparent border border-gray-800/20 rounded-xl" />;
@@ -106,6 +109,27 @@ export function DayCell({ date, isCurrentMonth, isToday, events, photos, onDoubl
               style={{
                 color: "#2a1b3d",
                 transform: `translateY(${30 * KITTY_FACE_OFFSET}px)`,
+              }}
+            >
+              {date.getDate()}
+            </span>
+          </span>
+        ) : thanksgiving ? (
+          // Every day sits on a turkey, like the Halloween skulls: faint behind
+          // ordinary days, full strength under today with the number on its body.
+          <span className="relative w-7 h-7 flex items-center justify-center">
+            <Turkey
+              size={isToday ? 34 : 32}
+              className={`absolute inset-0 m-auto ${isToday ? "" : "opacity-40"}`}
+            />
+            <span
+              className={`relative font-semibold leading-none ${isToday ? "text-xs font-bold" : "text-sm"} ${
+                !isToday && !isCurrentMonth ? "opacity-40" : ""
+              }`}
+              style={{
+                color: isToday || hasPhoto ? "#ffffff" : "var(--cal-date)",
+                textShadow: "0 1px 3px rgba(0,0,0,0.9)",
+                transform: isToday ? `translateY(${34 * TURKEY_BODY_OFFSET}px)` : undefined,
               }}
             >
               {date.getDate()}
